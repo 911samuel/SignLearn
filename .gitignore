@@ -1,0 +1,24 @@
+# ML artifacts
+models/
+*.h5
+*.pkl
+*.pt
+*.pth
+
+# Data (keep README)
+data/raw/
+data/processed/
+data/external/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
