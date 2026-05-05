@@ -10,8 +10,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt
-      - run: pytest
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download MediaPipe hand landmarker model
+        run: |
+          mkdir -p models
+          curl -L https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task \
+               -o models/hand_landmarker.task
+
+      - name: Build label map
+        run: python -m backend.data.label_map
+
+      - name: Run Phase 1 pipeline on mini fixture
+        run: |
+          python -m backend.data.extract \
+            --raw tests/fixtures/raw_mini \
+            --out /tmp/processed_ci \
+            --workers 2
+          python -m backend.data.validate --processed /tmp/processed_ci
+
+      - name: Run tests
+        run: pytest

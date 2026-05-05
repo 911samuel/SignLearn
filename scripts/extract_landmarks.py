@@ -4,39 +4,66 @@ Landmark extraction pipeline: webcam → MediaPipe → (30, 63) NumPy sequence.
 Usage:
     python scripts/extract_landmarks.py              # saves to default OUTPUT_PATH
     python scripts/extract_landmarks.py --out data/processed/my_sample.npy
+    python scripts/extract_landmarks.py --out data/processed/hello/001.npy --frames 30
 
 Output format (aligns with Member B / frontend contract):
     shape  : (SEQUENCE_LENGTH, LANDMARK_DIM) = (30, 63)
     values : normalised x,y,z in [0, 1] from MediaPipe
     missing: zero-padded rows when no hand is detected
+
+Uses MediaPipe Tasks API (mediapipe >= 0.10).
+Requires: models/hand_landmarker.task
 """
 
 import argparse
 import os
 import time
+from pathlib import Path
+
 import cv2
+import mediapipe as mp
 import numpy as np
-from mediapipe.python.solutions import hands as mp_hands
-from mediapipe.python.solutions import drawing_utils as mp_drawing
-from mediapipe.python.solutions import drawing_styles as mp_drawing_styles
+from mediapipe.tasks.python import vision
+from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions
 
 SEQUENCE_LENGTH = 30   # frames per sample (~1 s at 30 FPS)
 LANDMARK_DIM    = 63   # 21 landmarks × 3 coords (x, y, z)
 OUTPUT_PATH     = "data/processed/sample.npy"
+MODEL_PATH      = Path(__file__).parent.parent / "models" / "hand_landmarker.task"
+
+# Landmark connections for drawing
+HAND_CONNECTIONS = [
+    (0,1),(1,2),(2,3),(3,4),
+    (0,5),(5,6),(6,7),(7,8),
+    (5,9),(9,10),(10,11),(11,12),
+    (9,13),(13,14),(14,15),(15,16),
+    (13,17),(17,18),(18,19),(19,20),
+    (0,17),
+]
 
 
-def extract_row(hand_landmarks) -> np.ndarray:
-    """Flatten 21 MediaPipe landmarks into a (63,) array."""
+def _draw_landmarks(frame, landmarks, w, h):
+    pts = [(int(lm.x * w), int(lm.y * h)) for lm in landmarks]
+    for a, b in HAND_CONNECTIONS:
+        cv2.line(frame, pts[a], pts[b], (0, 200, 0), 2)
+    for pt in pts:
+        cv2.circle(frame, pt, 4, (0, 255, 0), -1)
+
+
+def extract_row(landmarks) -> np.ndarray:
+    """Flatten 21 MediaPipe Task landmarks into a (63,) float32 array."""
     return np.array(
-        [[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark],
+        [[lm.x, lm.y, lm.z] for lm in landmarks],
         dtype=np.float32,
     ).flatten()
 
 
-def collect_sequence(cap, hands, sequence_length: int) -> np.ndarray:
+def collect_sequence(cap, landmarker, sequence_length: int, start_ms: int) -> np.ndarray:
     """Capture `sequence_length` frames and return shape (sequence_length, 63)."""
     frames = []
     prev_time = time.time()
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
     while len(frames) < sequence_length:
         ret, frame = cap.read()
@@ -45,20 +72,13 @@ def collect_sequence(cap, hands, sequence_length: int) -> np.ndarray:
             break
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        rgb.flags.writeable = False
-        results = hands.process(rgb)
-        rgb.flags.writeable = True
-        frame = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        timestamp_ms = int(time.time() * 1000) - start_ms
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-        if results.multi_hand_landmarks:
-            row = extract_row(results.multi_hand_landmarks[0])
-            mp_drawing.draw_landmarks(
-                frame,
-                results.multi_hand_landmarks[0],
-                mp_hands.HAND_CONNECTIONS,
-                mp_drawing_styles.get_default_hand_landmarks_style(),
-                mp_drawing_styles.get_default_hand_connections_style(),
-            )
+        if result.hand_landmarks:
+            row = extract_row(result.hand_landmarks[0])
+            _draw_landmarks(frame, result.hand_landmarks[0], w, h)
         else:
             row = np.zeros(LANDMARK_DIM, dtype=np.float32)
 
@@ -71,11 +91,7 @@ def collect_sequence(cap, hands, sequence_length: int) -> np.ndarray:
         cv2.putText(
             frame,
             f"Frame {len(frames)}/{sequence_length}  FPS:{fps:.1f}",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.9,
-            (0, 255, 0),
-            2,
+            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2,
         )
         cv2.imshow("SignLearn – Landmark Extraction (q to abort)", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -86,38 +102,51 @@ def collect_sequence(cap, hands, sequence_length: int) -> np.ndarray:
 
 
 def main():
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(
+            f"Model not found: {MODEL_PATH}\n"
+            "Run: curl -L https://storage.googleapis.com/mediapipe-models/"
+            "hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task "
+            "-o models/hand_landmarker.task"
+        )
+
     parser = argparse.ArgumentParser(description="Extract hand landmarks to .npy")
     parser.add_argument("--out", default=OUTPUT_PATH, help="Output .npy path")
-    parser.add_argument(
-        "--frames", type=int, default=SEQUENCE_LENGTH, help="Number of frames to capture"
-    )
+    parser.add_argument("--frames", type=int, default=SEQUENCE_LENGTH,
+                        help="Number of frames to capture")
     args = parser.parse_args()
 
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    base_options = mp.tasks.BaseOptions(model_asset_path=str(MODEL_PATH))
+    options = HandLandmarkerOptions(
+        base_options=base_options,
+        running_mode=vision.RunningMode.VIDEO,
+        num_hands=1,
+        min_hand_detection_confidence=0.7,
+        min_tracking_confidence=0.5,
+    )
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError("Cannot open webcam.")
 
-    hands = mp_hands.Hands(
-        max_num_hands=1,
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.5,
-    )
-
     print(f"Collecting {args.frames} frames — show your hand to the camera.")
+    start_ms = int(time.time() * 1000)
+
     try:
-        data = collect_sequence(cap, hands, args.frames)
+        with HandLandmarker.create_from_options(options) as landmarker:
+            data = collect_sequence(cap, landmarker, args.frames, start_ms)
     finally:
-        hands.close()
         cap.release()
         cv2.destroyAllWindows()
 
     if data.shape[0] < args.frames:
         print(f"Warning: only captured {data.shape[0]}/{args.frames} frames.")
 
-    np.save(args.out, data)
-    print(f"Saved {data.shape} to {args.out}")
+    np.save(str(out_path), data)
+    print(f"Saved {data.shape} to {out_path}")
     print(f"NaNs present: {np.isnan(data).any()}")
 
 

@@ -15,7 +15,13 @@ __pycache__/
 *.pyc
 *.egg-info/
 venv/
+.venv/
 .env
+
+# Node
+node_modules/
+dist/
+build/
 
 # Jupyter
 .ipynb_checkpoints/

@@ -15,11 +15,19 @@ SignLearn is a real-time American Sign Language (ASL) recognition system. It use
 # Install dependencies
 pip install -r requirements.txt
 
-# Verify webcam + MediaPipe are working (smoke test)
+# Download MediaPipe hand landmarker model (required once, stored in models/)
+curl -L https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task \
+     -o models/hand_landmarker.task
+
+# Verify webcam + MediaPipe are working (smoke test, appends result to docs/hardware.md)
 python scripts/test_mediapipe.py
 
 # Collect a landmark sequence sample (30 frames → .npy)
 python scripts/extract_landmarks.py --out data/processed/<label>/sample_001.npy --frames 30
+
+# Download ASL datasets from Kaggle (requires ~/.kaggle/kaggle.json)
+python scripts/download_datasets.py --dataset alphabet
+python scripts/download_datasets.py --dataset digits
 
 # Verify raw dataset image integrity
 python backend/data_verification.py data/raw/digits
@@ -31,7 +39,10 @@ pytest
 pytest tests/test_pipeline.py -v
 ```
 
-Note: `tests/test_pipeline.py` requires `data/processed/sample.npy` to exist (run `extract_landmarks.py` first).
+Notes:
+- `tests/test_pipeline.py` requires `data/processed/sample.npy` (run `extract_landmarks.py` first).
+- Scripts use the **MediaPipe Tasks API** (`mediapipe.tasks`) — not the legacy `mediapipe.python.solutions` which is unavailable on macOS ARM in mediapipe ≥ 0.10.
+- `models/` is gitignored; `hand_landmarker.task` must be downloaded locally by each developer.
 
 ## Architecture
 
