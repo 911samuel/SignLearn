@@ -4,11 +4,20 @@ models/
 *.pkl
 *.pt
 *.pth
+*.keras
 
 # Data (keep README)
 data/raw/
 data/processed/
 data/external/
+
+# TensorBoard logs
+artifacts/logs/
+
+# Runtime artifacts
+artifacts/*.sqlite
+artifacts/*.gif
+artifacts/*.db
 
 # Python
 __pycache__/
