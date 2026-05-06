@@ -6,9 +6,9 @@ the time between sending the frame that completes a 30-frame window and
 receiving the resulting prediction.
 
 Usage:
-    python scripts/profile_ws.py
-    python scripts/profile_ws.py --frames 300 --url http://localhost:5001
-    python scripts/profile_ws.py --no-server   # server already running
+    python tests/profile_ws.py
+    python tests/profile_ws.py --frames 300 --url http://localhost:5001
+    python tests/profile_ws.py --no-server   # server already running
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def run(url: str, total_frames: int, start_server: bool) -> list[float]:
     if start_server:
         print("Starting server...", flush=True)
         proc = subprocess.Popen(
-            [sys.executable, str(REPO_ROOT / "scripts" / "run_server.py")],
+            [sys.executable, str(REPO_ROOT / "backend" / "scripts" / "run_server.py")],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

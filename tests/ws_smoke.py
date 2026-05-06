@@ -3,9 +3,9 @@
 Streams one fixture .npy file to the running server and prints each prediction.
 
 Usage (server must already be running):
-    python scripts/ws_smoke.py
-    python scripts/ws_smoke.py --fixture tests/fixtures/processed_mini/train/a_s01_0000.npy
-    python scripts/ws_smoke.py --url http://localhost:5001
+    python tests/ws_smoke.py
+    python tests/ws_smoke.py --fixture tests/fixtures/processed_mini/train/a_s01_0000.npy
+    python tests/ws_smoke.py --url http://localhost:5001
 """
 
 from __future__ import annotations

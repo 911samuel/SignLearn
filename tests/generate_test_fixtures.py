@@ -9,9 +9,9 @@ augmentation and normalization exercise real non-trivial data paths.
 
 Usage
 -----
-python scripts/generate_test_fixtures.py           # default output
-python scripts/generate_test_fixtures.py --out tests/fixtures/processed_mini
-python scripts/generate_test_fixtures.py --classes a b c --train 30 --val 8 --test 8
+python tests/generate_test_fixtures.py           # default output
+python tests/generate_test_fixtures.py --out tests/fixtures/processed_mini
+python tests/generate_test_fixtures.py --classes a b c --train 30 --val 8 --test 8
 """
 
 import argparse

@@ -9,8 +9,8 @@ Writes:
 
 Usage
 -----
-python scripts/profile_inference.py
-python scripts/profile_inference.py --model artifacts/checkpoints/lstm_best.keras --n 500
+python backend/scripts/profile_inference.py
+python backend/scripts/profile_inference.py --model artifacts/checkpoints/lstm_best.keras --n 500
 """
 
 import argparse
@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.model.config import CHECKPOINTS_DIR, FEATURE_DIM, REPORTS_DIR, SEQUENCE_LEN

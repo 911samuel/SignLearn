@@ -17,9 +17,9 @@ Modes
 
 Usage
 -----
-python scripts/split_dataset.py --raw data/raw/alphabet          # dry-run
-python scripts/split_dataset.py --raw data/raw/alphabet --copy   # copy files
-python scripts/split_dataset.py --raw data/raw/alphabet --symlink --out /tmp/split
+python backend/scripts/split_dataset.py --raw data/raw/alphabet          # dry-run
+python backend/scripts/split_dataset.py --raw data/raw/alphabet --copy   # copy files
+python backend/scripts/split_dataset.py --raw data/raw/alphabet --symlink --out /tmp/split
 """
 
 import argparse
@@ -29,7 +29,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.data.extract import assign_subject, subject_to_split

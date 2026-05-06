@@ -6,9 +6,9 @@ Requirements:
   Place ~/.kaggle/kaggle.json (from kaggle.com → Account → API → Create Token)
 
 Usage:
-  python scripts/download_datasets.py               # downloads all
-  python scripts/download_datasets.py --dataset alphabet
-  python scripts/download_datasets.py --dataset digits
+  python backend/scripts/download_datasets.py               # downloads all
+  python backend/scripts/download_datasets.py --dataset alphabet
+  python backend/scripts/download_datasets.py --dataset digits
 
 Datasets:
   alphabet  → grassknoted/asl-alphabet   (A-Z, ~87K images, 200x200)
@@ -21,7 +21,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-RAW = Path(__file__).parent.parent / "data" / "raw"
+RAW = Path(__file__).parent.parent.parent / "data" / "raw"
 
 DATASETS = {
     "alphabet": {

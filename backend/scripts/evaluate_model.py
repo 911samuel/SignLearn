@@ -7,9 +7,9 @@ Produces:
 
 Usage
 -----
-python scripts/evaluate_model.py
-python scripts/evaluate_model.py --model artifacts/checkpoints/lstm_best.keras
-python scripts/evaluate_model.py --model artifacts/checkpoints/lstm_final.h5
+python backend/scripts/evaluate_model.py
+python backend/scripts/evaluate_model.py --model artifacts/checkpoints/lstm_best.keras
+python backend/scripts/evaluate_model.py --model artifacts/checkpoints/lstm_final.keras
 """
 
 import argparse
@@ -30,7 +30,7 @@ from sklearn.metrics import (
     recall_score,
 )
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.data.dataset import build_dataset
@@ -41,7 +41,7 @@ from backend.model.config import (
     compact_class_names,
     compact_label_map,
 )
-from scripts.train_model import _remap_labels
+from backend.scripts.train_model import _remap_labels
 
 
 def evaluate(model_path: Path, data_dir: Path, reports_dir: Path) -> dict:

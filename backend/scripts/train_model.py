@@ -2,9 +2,9 @@
 
 Usage
 -----
-python scripts/train_model.py                         # default config
-python scripts/train_model.py --epochs 50 --batch-size 16
-python scripts/train_model.py --data-dir data/processed --out-dir artifacts
+python backend/scripts/train_model.py                         # default config
+python backend/scripts/train_model.py --epochs 50 --batch-size 16
+python backend/scripts/train_model.py --data-dir data/processed --out-dir artifacts
 """
 
 import argparse
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import tensorflow as tf
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.data.dataset import build_dataset

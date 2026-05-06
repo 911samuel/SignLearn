@@ -1,6 +1,6 @@
 """
 Webcam smoke test: MediaPipe hand tracking with FPS overlay.
-Run with: python scripts/test_mediapipe.py
+Run with: python tests/test_mediapipe.py
 Press 'q' to quit.
 Success criteria: >=15 FPS stable, landmarks visible on hand.
 Appends a result line to docs/hardware.md on exit.

@@ -10,19 +10,19 @@ No extra libraries required — uses only TensorFlow/Keras and stdlib.
 Usage
 -----
 # Full grid search (all combinations of the default grid)
-python scripts/tune_hyperparams.py
+python backend/scripts/tune_hyperparams.py
 
 # Random search — sample 10 configs at random from the full grid
-python scripts/tune_hyperparams.py --random 10
+python backend/scripts/tune_hyperparams.py --random 10
 
 # Quick smoke test — 1 epoch, fewer configs
-python scripts/tune_hyperparams.py --epochs 1 --random 3
+python backend/scripts/tune_hyperparams.py --epochs 1 --random 3
 
 # Custom data dir
-python scripts/tune_hyperparams.py --data-dir tests/fixtures/processed_mini
+python backend/scripts/tune_hyperparams.py --data-dir tests/fixtures/processed_mini
 
 # Use GPU (default: cpu)
-python scripts/tune_hyperparams.py --device gpu
+python backend/scripts/tune_hyperparams.py --device gpu
 """
 
 import argparse
@@ -35,7 +35,7 @@ from dataclasses import asdict
 from itertools import product
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.data.dataset import build_dataset
@@ -47,7 +47,7 @@ from backend.model.config import (
     TrainConfig,
     compact_label_map,
 )
-from scripts.train_model import _remap_labels
+from backend.scripts.train_model import _remap_labels
 
 # ---------------------------------------------------------------------------
 # Default hyperparameter grid
@@ -291,5 +291,5 @@ if __name__ == "__main__":
         print(f"  learning_rate : {best['hparams']['learning_rate']}")
         print(f"  val_accuracy  : {best['best_val_accuracy']:.4f}")
         print(f"\nUpdate TrainConfig in backend/model/config.py with these values,")
-        print(f"then run: python scripts/train_model.py")
+        print(f"then run: python backend/scripts/train_model.py")
     print(f"{'─' * 60}\n")

@@ -2,9 +2,9 @@
 Landmark extraction pipeline: webcam → MediaPipe → (30, 126) NumPy sequence.
 
 Usage:
-    python scripts/extract_landmarks.py              # saves to default OUTPUT_PATH
-    python scripts/extract_landmarks.py --out data/processed/my_sample.npy
-    python scripts/extract_landmarks.py --out data/processed/hello/001.npy --frames 30
+    python backend/scripts/extract_landmarks.py              # saves to default OUTPUT_PATH
+    python backend/scripts/extract_landmarks.py --out data/processed/my_sample.npy
+    python backend/scripts/extract_landmarks.py --out data/processed/hello/001.npy --frames 30
 
 Output format (aligns with backend WebSocket / training pipeline):
     shape  : (SEQUENCE_LEN, FEATURE_DIM) = (30, 126)
@@ -28,7 +28,7 @@ import numpy as np
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.data.constants import FEATURE_DIM, HAND_DIM, SEQUENCE_LEN

@@ -5,8 +5,8 @@ ready prediction is received, posts a speech entry, and asserts both show up
 in GET /transcript.
 
 Usage:
-    python scripts/e2e_smoke.py               # starts its own server
-    python scripts/e2e_smoke.py --no-server   # server already running
+    python tests/e2e_smoke.py               # starts its own server
+    python tests/e2e_smoke.py --no-server   # server already running
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def run(url: str, start_server: bool) -> None:
     if start_server:
         print("Starting server...", flush=True)
         proc = subprocess.Popen(
-            [sys.executable, str(REPO_ROOT / "scripts" / "run_server.py")],
+            [sys.executable, str(REPO_ROOT / "backend" / "scripts" / "run_server.py")],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
