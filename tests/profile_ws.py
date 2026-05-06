@@ -28,8 +28,10 @@ import socketio as sio_lib
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "processed_mini" / "train"
 REPORT_PATH = REPO_ROOT / "artifacts" / "reports" / "phase3_latency.json"
+PHASE5_REPORT_PATH = REPO_ROOT / "artifacts" / "reports" / "phase5_latency.json"
 DEFAULT_URL = "http://localhost:5001"
 P95_TARGET_MS = 500.0
+P95_TARGET_PHASE5_MS = 2000.0
 
 
 def _load_frames(n: int) -> list[list[float]]:
@@ -159,8 +161,21 @@ def main() -> None:
         "async_mode": "threading",
     }
 
+    phase5_report = {
+        "frames_sent": args.frames,
+        "predictions_received": len(latencies),
+        "mean_ms": round(mean, 2),
+        "p50_ms": round(p50, 2),
+        "p95_ms": round(p95, 2),
+        "p99_ms": round(p99, 2),
+        "target_p95_ms": P95_TARGET_PHASE5_MS,
+        "passed": p95 <= P95_TARGET_PHASE5_MS,
+        "note": "WS round-trip (proxy for end-to-end; add ~50-100ms for in-browser MediaPipe)",
+    }
+
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(json.dumps(report, indent=2))
+    PHASE5_REPORT_PATH.write_text(json.dumps(phase5_report, indent=2))
 
     print(f"\n{'='*40}")
     print(f"  Samples  : {len(latencies)}")

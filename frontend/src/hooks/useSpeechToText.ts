@@ -1,4 +1,6 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://127.0.0.1:5001";
 
 export interface SpeechEntry {
   id: number;
@@ -6,7 +8,7 @@ export interface SpeechEntry {
   ts: number;
 }
 
-export function useSpeechToText() {
+export function useSpeechToText(onResult?: (text: string, ts: number) => void) {
   const [transcript, setTranscript] = useState<SpeechEntry[]>([]);
   const [listening, setListening] = useState(false);
   const [supported] = useState(
@@ -18,6 +20,8 @@ export function useSpeechToText() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recogRef = useRef<any>(null);
   const idRef = useRef(0);
+  const onResultRef = useRef(onResult);
+  useEffect(() => { onResultRef.current = onResult; }, [onResult]);
 
   const start = useCallback(() => {
     if (!supported || listening) return;
@@ -37,10 +41,20 @@ export function useSpeechToText() {
         if (e.results[i].isFinal) {
           const text = e.results[i][0].transcript.trim();
           if (text) {
+            const ts = Date.now();
             setTranscript((prev) => [
               ...prev,
-              { id: ++idRef.current, text, ts: Date.now() },
+              { id: ++idRef.current, text, ts },
             ]);
+            onResultRef.current?.(text, ts);
+            // Persist to backend (fire-and-forget)
+            fetch(`${BACKEND_URL}/speech-to-text`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text }),
+            }).catch((err) => {
+              console.warn("[useSpeechToText] Failed to persist speech entry:", err);
+            });
           }
         }
       }

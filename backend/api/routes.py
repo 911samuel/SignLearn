@@ -12,8 +12,12 @@ bp = Blueprint("api", __name__)
 
 def _model_status() -> dict:
     loaded = model_loader.is_loaded()
-    num = len(model_loader.get_class_names()) if loaded else None
-    return {"model_loaded": loaded, "num_classes": num}
+    return {
+        "model_loaded": loaded,
+        "num_classes": len(model_loader.get_class_names()) if loaded else None,
+        "model_path": str(CONFIG.model_path),
+        "load_error": model_loader.get_load_error(),
+    }
 
 
 # ---------------------------------------------------------------------------

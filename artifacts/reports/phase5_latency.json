@@ -5,7 +5,7 @@
   "p50_ms": 35.85,
   "p95_ms": 127.11,
   "p99_ms": 127.11,
-  "target_p95_ms": 500.0,
+  "target_p95_ms": 2000.0,
   "passed": true,
-  "async_mode": "threading"
+  "note": "WS round-trip (proxy for end-to-end; add ~50-100ms for in-browser MediaPipe)"
 }

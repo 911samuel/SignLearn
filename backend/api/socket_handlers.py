@@ -60,6 +60,11 @@ def register(socketio: SocketIO) -> None:
 
         try:
             result = buf.push(data["landmarks"])
+        except RuntimeError:
+            # Model checkpoint missing or failed to load — stay alive, tell the client
+            emit("prediction", {"label": None, "confidence": None, "ready": False,
+                                "error": "model_not_loaded"})
+            return
         except (KeyError, ValueError) as exc:
             emit("error", {"message": str(exc)})
             return

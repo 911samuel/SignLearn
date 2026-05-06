@@ -33,6 +33,31 @@
   overflow: hidden;
 }
 
+.app-banner {
+  text-align: center;
+  font-size: 0.85rem;
+  padding: 0.4rem 1rem;
+  font-weight: 500;
+}
+
+.app-banner--disconnected {
+  background: #3b1010;
+  color: #ff6b6b;
+  border-bottom: 1px solid #5a1a1a;
+}
+
+.app-banner--reconnecting {
+  background: #2e2000;
+  color: #ffc107;
+  border-bottom: 1px solid #4a3800;
+}
+
+.app-banner--model-missing {
+  background: #1a0d2e;
+  color: #ce93d8;
+  border-bottom: 1px solid #2d1a4a;
+}
+
 /* Responsive: stack panels on narrow screens */
 @media (max-width: 800px) {
   .app-main {
@@ -40,3 +65,72 @@
     overflow-y: auto;
   }
 }
+
+/* Conversation history log */
+.conv-log {
+  border-top: 1px solid #222;
+  background: #0a0a14;
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.conv-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 1rem;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.conv-log-heading {
+  font-size: 0.7rem;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.conv-log-export {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: none;
+  background: #1a3a2e;
+  color: #4caf50;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.conv-log-empty {
+  padding: 0.5rem 1rem;
+  font-size: 0.82rem;
+  color: #333;
+  margin: 0;
+}
+
+.conv-log-entries {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.4rem 1rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.conv-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 5px;
+  font-size: 0.875rem;
+}
+
+.conv-entry--sign { background: #0d1a2e; }
+.conv-entry--speech { background: #1a1a2e; }
+
+.conv-entry-icon { font-size: 0.9rem; flex-shrink: 0; }
+.conv-entry-text { flex: 1; color: #d0d0d0; }
+.conv-entry-conf { color: #555; font-size: 0.72rem; flex-shrink: 0; }
+.conv-entry-time { color: #444; font-size: 0.72rem; flex-shrink: 0; }

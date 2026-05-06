@@ -15,19 +15,27 @@ export interface Prediction {
   ready: boolean;
 }
 
+export type ConnectionStatus = "connected" | "disconnected" | "reconnecting";
+
 export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const [prediction, setPrediction] = useState<Prediction>({
     label: null,
     confidence: null,
     ready: false,
   });
-  const [connected, setConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [landmarkerResult, setLandmarkerResult] = useState<HandLandmarkerResult | null>(null);
+  const [paused, setPaused] = useState(false);
+
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastVideoTimeRef = useRef(-1);
+  const pausedRef = useRef(false);
+  // Timestamp of the last emitted frame — used to measure capture-to-display latency
+  const lastFrameTsRef = useRef<number>(0);
 
   // Initialise MediaPipe HandLandmarker (WASM, runs in-browser)
   useEffect(() => {
@@ -61,9 +69,16 @@ export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | 
     const socket = io(BACKEND_URL, { transports: ["websocket"] });
     socketRef.current = socket;
 
-    socket.on("connect", () => setConnected(true));
-    socket.on("disconnect", () => setConnected(false));
-    socket.on("prediction", (data: Prediction) => setPrediction(data));
+    socket.on("connect", () => setConnectionStatus("connected"));
+    socket.on("disconnect", () => setConnectionStatus("disconnected"));
+    socket.on("reconnect_attempt", () => setConnectionStatus("reconnecting"));
+    socket.on("reconnect", () => setConnectionStatus("connected"));
+    socket.on("prediction", (data: Prediction) => {
+      if (data.ready && lastFrameTsRef.current) {
+        setLatencyMs(Date.now() - lastFrameTsRef.current);
+      }
+      setPrediction(data);
+    });
 
     return () => {
       socket.disconnect();
@@ -88,8 +103,11 @@ export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | 
       );
 
       setLandmarkerResult(result);
-      const landmarks = flattenLandmarks(result);
-      socket.emit("frame", { landmarks, t: Date.now() });
+      if (!pausedRef.current) {
+        const landmarks = flattenLandmarks(result);
+        lastFrameTsRef.current = Date.now();
+        socket.emit("frame", { landmarks, t: lastFrameTsRef.current });
+      }
     }
 
     rafRef.current = requestAnimationFrame(tick);
@@ -103,7 +121,14 @@ export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | 
     setPrediction({ label: null, confidence: null, ready: false });
   }, []);
 
-  return { prediction, connected, landmarkerResult, reset };
+  const togglePaused = useCallback(() => {
+    setPaused((p) => {
+      pausedRef.current = !p;
+      return !p;
+    });
+  }, []);
+
+  return { prediction, connectionStatus, landmarkerResult, reset, paused, togglePaused, latencyMs };
 }
 
 // Flatten up to 2 hands into a fixed-length 126-float array.
