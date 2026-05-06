@@ -13,14 +13,21 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import sys
+
 import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions
 
-HARDWARE_DOC = Path(__file__).parent.parent / "docs" / "hardware.md"
-MODEL_PATH = Path(__file__).parent.parent / "models" / "hand_landmarker.task"
+_REPO_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(_REPO_ROOT))
+
+from backend.data.extract import ensure_model
+
+HARDWARE_DOC = _REPO_ROOT / "docs" / "hardware.md"
+MODEL_PATH   = _REPO_ROOT / "models" / "hand_landmarker.task"
 
 # Landmark connections for drawing (index pairs)
 HAND_CONNECTIONS = [
@@ -55,15 +62,8 @@ def _append_webcam_result(width: int, height: int, avg_fps: float) -> None:
 
 
 def main():
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(
-            f"Model not found: {MODEL_PATH}\n"
-            "Run: curl -L https://storage.googleapis.com/mediapipe-models/"
-            "hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task "
-            "-o models/hand_landmarker.task"
-        )
-
-    base_options = mp.tasks.BaseOptions(model_asset_path=str(MODEL_PATH))
+    model_path = ensure_model(MODEL_PATH)
+    base_options = mp.tasks.BaseOptions(model_asset_path=str(model_path))
     options = HandLandmarkerOptions(
         base_options=base_options,
         running_mode=vision.RunningMode.VIDEO,

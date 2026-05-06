@@ -16,13 +16,44 @@ from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions
 # Constants
 # ---------------------------------------------------------------------------
 
-SEQUENCE_LENGTH = 30
-LANDMARK_DIM    = 63    # 21 landmarks × 3 coords per hand
-TWO_HAND_DIM    = 126   # left(63) + right(63)
+from backend.data.constants import FEATURE_DIM, HAND_DIM, SEQUENCE_LEN
+
+SEQUENCE_LENGTH = SEQUENCE_LEN   # backward-compat alias used in to_sequence()
+LANDMARK_DIM    = HAND_DIM       # 63 — per-hand feature width
+TWO_HAND_DIM    = FEATURE_DIM    # 126 — both-hands feature width
 
 _REPO_ROOT  = Path(__file__).parent.parent.parent
 MODEL_PATH  = _REPO_ROOT / "models" / "hand_landmarker.task"
 _ARTIFACTS  = _REPO_ROOT / "artifacts"
+
+_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
+)
+
+
+def ensure_model(model_path: Path = MODEL_PATH) -> Path:
+    """Return *model_path*, downloading the MediaPipe hand landmarker if absent.
+
+    Uses only stdlib (urllib) so no extra dependencies are needed. The download
+    is ~5 MB and is idempotent — subsequent calls return immediately.
+    """
+    if model_path.exists():
+        return model_path
+    import urllib.request
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[extract] MediaPipe model not found — downloading to {model_path} …")
+    try:
+        urllib.request.urlretrieve(_MODEL_URL, model_path)
+    except Exception as exc:
+        model_path.unlink(missing_ok=True)  # remove partial download
+        raise RuntimeError(
+            f"Failed to download MediaPipe hand landmarker model: {exc}\n"
+            f"Download it manually:\n"
+            f"  curl -L {_MODEL_URL} -o {model_path}"
+        ) from exc
+    print("[extract] Download complete.")
+    return model_path
 
 # ---------------------------------------------------------------------------
 # Subtask 2 — pseudo-subject assignment & canonical naming
@@ -65,14 +96,8 @@ def canonical_name(label: str, subject_id: int, sample_id: int) -> str:
 # ---------------------------------------------------------------------------
 
 def _build_landmarker() -> HandLandmarker:
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(
-            f"MediaPipe model not found: {MODEL_PATH}\n"
-            "Run: curl -L https://storage.googleapis.com/mediapipe-models/"
-            "hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
-            " -o models/hand_landmarker.task"
-        )
-    base_options = mp_lib.tasks.BaseOptions(model_asset_path=str(MODEL_PATH))
+    model_path = ensure_model(MODEL_PATH)
+    base_options = mp_lib.tasks.BaseOptions(model_asset_path=str(model_path))
     options = HandLandmarkerOptions(
         base_options=base_options,
         running_mode=vision.RunningMode.IMAGE,

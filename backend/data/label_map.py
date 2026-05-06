@@ -47,11 +47,21 @@ def build_label_map() -> dict[str, int]:
 
 
 def load_label_map() -> dict[str, int]:
-    """Load the committed label_map.json. Raise if not found (run build first)."""
+    """Load label_map.json, auto-building it from vocabulary.md if absent.
+
+    The auto-build path is a convenience for local development — CI always
+    runs ``python -m backend.data.label_map`` explicitly so the file is
+    present before any other step runs.
+    """
     if not _LABEL_MAP_PATH.exists():
-        raise FileNotFoundError(
-            f"{_LABEL_MAP_PATH} not found — run: python -m backend.data.label_map"
+        import warnings
+        warnings.warn(
+            f"{_LABEL_MAP_PATH} not found — auto-building from {_VOCAB_PATH}. "
+            "Run 'python -m backend.data.label_map' once to persist it.",
+            UserWarning,
+            stacklevel=2,
         )
+        return build_label_map()
     with open(_LABEL_MAP_PATH) as f:
         return json.load(f)
 

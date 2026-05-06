@@ -1,0 +1,25 @@
+{
+  "raw_dir": "tests/fixtures/raw_mini",
+  "distribution": {
+    "train": {
+      "a": 2,
+      "b": 3,
+      "c": 2
+    },
+    "val": {
+      "a": 2,
+      "b": 1,
+      "c": 1
+    },
+    "test": {
+      "a": 1,
+      "b": 1,
+      "c": 2
+    }
+  },
+  "totals": {
+    "train": 7,
+    "val": 4,
+    "test": 4
+  }
+}

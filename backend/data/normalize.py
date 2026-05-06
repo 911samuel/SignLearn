@@ -4,14 +4,13 @@ import numpy as np
 from scipy.interpolate import interp1d
 
 # ---------------------------------------------------------------------------
-# Layout constants (must match extract.py)
+# Layout constants — imported from constants.py (single source of truth)
 # ---------------------------------------------------------------------------
 
-N_LANDMARKS   = 21
-COORDS        = 3         # x, y, z
-HAND_DIM      = N_LANDMARKS * COORDS   # 63
-TWO_HAND_DIM  = HAND_DIM * 2           # 126
-WRIST_IDX     = 0                      # landmark index of the wrist
+from backend.data.constants import COORDS, FEATURE_DIM, HAND_DIM, N_LANDMARKS, SEQUENCE_LEN
+
+TWO_HAND_DIM = FEATURE_DIM   # alias kept for backward compatibility
+WRIST_IDX    = 0              # landmark index of the wrist
 
 
 def _split_hands(frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -94,7 +93,7 @@ def normalize_sequence(seq: np.ndarray) -> np.ndarray:
     return np.stack([normalize_frame(f) for f in seq], axis=0).astype(np.float32)
 
 
-def interpolate_to_length(seq: np.ndarray, target_len: int = 30) -> np.ndarray:
+def interpolate_to_length(seq: np.ndarray, target_len: int = SEQUENCE_LEN) -> np.ndarray:
     """Resample a variable-length (T, 126) sequence to (target_len, 126).
 
     Uses linear interpolation along the time axis. For static images where

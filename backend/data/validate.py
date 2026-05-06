@@ -16,13 +16,13 @@ from pathlib import Path
 
 import numpy as np
 
+from backend.data.constants import FEATURE_DIM, SEQUENCE_LEN
 from backend.data.label_map import load_label_map, resolve_label
 
 _REPO_ROOT   = Path(__file__).parent.parent.parent
 _ARTIFACTS   = _REPO_ROOT / "artifacts"
 _STEM_RE     = re.compile(r"^(.+)_s(\d{2})_(\d{4})$")
-SEQUENCE_LEN = 30
-TWO_HAND_DIM = 126
+TWO_HAND_DIM = FEATURE_DIM   # alias for readability within this module
 SPLITS       = ("train", "val", "test")
 
 

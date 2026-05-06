@@ -75,9 +75,20 @@ def test_values_are_sequential():
     assert indices == list(range(len(m))), "Indices must be 0..N-1 with no gaps"
 
 
-def test_load_raises_when_missing(tmp_path, monkeypatch):
+def test_load_auto_builds_when_missing(tmp_path, monkeypatch):
+    """load_label_map() should auto-build (with a UserWarning) rather than raise."""
     monkeypatch.setattr(
         "backend.data.label_map._LABEL_MAP_PATH", tmp_path / "missing.json"
     )
-    with pytest.raises(FileNotFoundError):
-        load_label_map()
+    import warnings
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = load_label_map()
+
+    # Must return a valid label map
+    assert isinstance(result, dict), "Expected a dict from auto-build"
+    assert len(result) > 0, "Auto-built label map is empty"
+
+    # Must have emitted a UserWarning
+    user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+    assert user_warnings, "Expected a UserWarning when auto-building label_map"

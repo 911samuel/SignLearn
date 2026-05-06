@@ -17,6 +17,7 @@ Requires: models/hand_landmarker.task
 
 import argparse
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -26,10 +27,16 @@ import numpy as np
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions
 
-SEQUENCE_LENGTH = 30   # frames per sample (~1 s at 30 FPS)
-LANDMARK_DIM    = 63   # 21 landmarks × 3 coords (x, y, z)
+_REPO_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(_REPO_ROOT))
+
+from backend.data.constants import HAND_DIM, SEQUENCE_LEN
+from backend.data.extract import ensure_model
+
+SEQUENCE_LENGTH = SEQUENCE_LEN   # frames per sample (~1 s at 30 FPS)
+LANDMARK_DIM    = HAND_DIM       # 63 — 21 landmarks × 3 coords (x, y, z)
 OUTPUT_PATH     = "data/processed/sample.npy"
-MODEL_PATH      = Path(__file__).parent.parent / "models" / "hand_landmarker.task"
+MODEL_PATH      = _REPO_ROOT / "models" / "hand_landmarker.task"
 
 # Landmark connections for drawing
 HAND_CONNECTIONS = [
@@ -102,14 +109,6 @@ def collect_sequence(cap, landmarker, sequence_length: int, start_ms: int) -> np
 
 
 def main():
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(
-            f"Model not found: {MODEL_PATH}\n"
-            "Run: curl -L https://storage.googleapis.com/mediapipe-models/"
-            "hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task "
-            "-o models/hand_landmarker.task"
-        )
-
     parser = argparse.ArgumentParser(description="Extract hand landmarks to .npy")
     parser.add_argument("--out", default=OUTPUT_PATH, help="Output .npy path")
     parser.add_argument("--frames", type=int, default=SEQUENCE_LENGTH,
@@ -119,7 +118,8 @@ def main():
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    base_options = mp.tasks.BaseOptions(model_asset_path=str(MODEL_PATH))
+    model_path = ensure_model(MODEL_PATH)
+    base_options = mp.tasks.BaseOptions(model_asset_path=str(model_path))
     options = HandLandmarkerOptions(
         base_options=base_options,
         running_mode=vision.RunningMode.VIDEO,

@@ -7,12 +7,16 @@ import numpy as np
 import tensorflow as tf
 
 from backend.data.augment import random_augment
+from backend.data.constants import FEATURE_DIM, SEQUENCE_LEN
 from backend.data.label_map import load_label_map, resolve_label
 from backend.data.normalize import TWO_HAND_DIM, normalize_sequence
 
-_REPO_ROOT  = Path(__file__).parent.parent.parent
-_PROCESSED  = _REPO_ROOT / "data" / "processed"
-SEQUENCE_LEN = 30
+_REPO_ROOT = Path(__file__).parent.parent.parent
+_PROCESSED = _REPO_ROOT / "data" / "processed"
+
+# Re-export so callers that did `from backend.data.dataset import SEQUENCE_LEN`
+# continue to work without change.
+__all__ = ["SEQUENCE_LEN", "build_dataset", "list_split"]
 
 # Regex to extract the raw label prefix from a canonical filename like
 # "zero_s03_0042.npy" or "0_s03_0042.npy"
