@@ -1,0 +1,17 @@
+pytest
+Pillow
+mediapipe>=0.10.14
+opencv-python
+numpy>=2
+tensorflow>=2.15
+scikit-learn>=1.3
+pandas>=2.0
+matplotlib>=3.8
+seaborn>=0.13
+kaggle
+scipy>=1.12
+tensorboard
+flask>=3.0
+flask-socketio>=5.3
+flask-cors>=4.0
+websocket-client>=1.7

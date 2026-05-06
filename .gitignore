@@ -1,3 +1,33 @@
+# ML artifacts
+models/
+*.h5
+*.pkl
+*.pt
+*.pth
+
+# Data (keep README)
+data/raw/
+data/processed/
+data/external/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+venv/
+.venv/
+.env
+
+# Node
+node_modules/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
 # Python
 __pycache__/
 *.py[cod]

@@ -1,0 +1,21 @@
+{
+  "model": "artifacts/checkpoints/lstm_best.keras",
+  "test_samples": 304,
+  "num_classes": 10,
+  "class_names": [
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine"
+  ],
+  "accuracy": 0.9243,
+  "precision_macro": 0.9192,
+  "recall_macro": 0.9298,
+  "f1_macro": 0.9204
+}

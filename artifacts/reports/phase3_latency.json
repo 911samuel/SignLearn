@@ -1,0 +1,11 @@
+{
+  "frames_sent": 900,
+  "predictions_received": 30,
+  "mean_ms": 39.11,
+  "p50_ms": 34.73,
+  "p95_ms": 87.7,
+  "p99_ms": 92.24,
+  "target_p95_ms": 500.0,
+  "passed": true,
+  "async_mode": "threading"
+}

@@ -1,0 +1,62 @@
+{
+  "grid": {
+    "lstm_units": [
+      [
+        128,
+        64
+      ],
+      [
+        256,
+        128
+      ],
+      [
+        64,
+        32
+      ]
+    ],
+    "dropout": [
+      0.3,
+      0.4,
+      0.5
+    ],
+    "learning_rate": [
+      0.001,
+      0.0005,
+      0.0001
+    ]
+  },
+  "results": [
+    {
+      "run_id": 2,
+      "hparams": {
+        "lstm_units": [
+          128,
+          64
+        ],
+        "dropout": 0.4,
+        "learning_rate": 0.001
+      },
+      "best_val_accuracy": 0.6667,
+      "best_epoch": 1,
+      "epochs_trained": 1,
+      "training_time_s": 3.03,
+      "num_params": 184323
+    },
+    {
+      "run_id": 1,
+      "hparams": {
+        "lstm_units": [
+          64,
+          32
+        ],
+        "dropout": 0.3,
+        "learning_rate": 0.0001
+      },
+      "best_val_accuracy": 0.3333,
+      "best_epoch": 1,
+      "epochs_trained": 1,
+      "training_time_s": 2.92,
+      "num_params": 63619
+    }
+  ]
+}
