@@ -20,17 +20,17 @@ curl -L https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_lan
      -o models/hand_landmarker.task
 
 # Verify webcam + MediaPipe are working (smoke test, appends result to docs/hardware.md)
-python scripts/test_mediapipe.py
+python tests/test_mediapipe.py
 
 # Collect a landmark sequence sample (30 frames → .npy)
-python scripts/extract_landmarks.py --out data/processed/<label>/sample_001.npy --frames 30
+python backend/scripts/extract_landmarks.py --out data/processed/<label>/sample_001.npy --frames 30
 
 # Download ASL datasets from Kaggle (requires ~/.kaggle/kaggle.json)
-python scripts/download_datasets.py --dataset alphabet
-python scripts/download_datasets.py --dataset digits
+python backend/scripts/download_datasets.py --dataset alphabet
+python backend/scripts/download_datasets.py --dataset digits
 
 # Verify raw dataset image integrity
-python backend/data_verification.py data/raw/digits
+python backend/scripts/data_verification.py data/raw/digits
 
 # Run all tests
 pytest
@@ -62,7 +62,7 @@ Key decision: **No CNN stage.** MediaPipe replaces spatial feature extraction; L
 - `data/raw/` — static image datasets (ASL Alphabet ~3000 imgs/class, Digits ~100 imgs/class)
 - `data/processed/` — landmark sequences as `.npy` files in shape `(30, 126)`, float32
 - `data/external/` — third-party metadata / WLASL subsets
-- `models/` — trained `.h5` model files (gitignored)
+- `models/` — MediaPipe model files (gitignored; `.keras` checkpoints tracked via Git LFS in `artifacts/checkpoints/`)
 
 **Training data strategy**: Public datasets are static images and have bias issues. Primary approach is custom self-recorded data via `extract_landmarks.py` targeting 50 samples per class (93 × 50 ≈ 4650 total sequences).
 
@@ -81,13 +81,13 @@ Flask + Flask-SocketIO server (`threading` async mode). Landmark frames arrive o
 pip install -r requirements.txt
 
 # Start the dev server on http://127.0.0.1:5001
-python scripts/run_server.py
+python backend/scripts/run_server.py
 
 # End-to-end smoke test (starts its own server subprocess)
-python scripts/e2e_smoke.py
+python tests/e2e_smoke.py
 
 # WebSocket latency profiler (p95 target < 500 ms)
-python scripts/profile_ws.py
+python tests/profile_ws.py
 ```
 
 **REST endpoints:**
@@ -110,9 +110,20 @@ server → client:  emit("reset_ack", {})
 
 Normalization (`normalize_frame`) runs on the backend — frontend sends raw landmark values.
 
-### Frontend (planned, Phase 4)
+### Frontend (Phase 4 — complete)
 
-React app. MediaPipe Hands runs **in-browser** (lower latency than backend extraction). Dual-panel layout: left (signer + webcam), right (hearing user + speech input). `useSignRecognition` custom hook.
+React + Vite app in `frontend/`. MediaPipe Hands runs **in-browser** (lower latency than backend extraction). Dual-panel layout: left (signer + webcam), right (hearing user + speech input).
+
+**Running the frontend:**
+
+```bash
+cd frontend && npm install
+npm run dev   # http://localhost:5173
+```
+
+Set `VITE_BACKEND_URL=http://127.0.0.1:5001` in `frontend/.env` (defaults to that if unset).
+
+Key files: `src/hooks/useSignRecognition.ts`, `src/hooks/useSpeechToText.ts`, `src/components/SignerPanel.tsx`, `src/components/HearingPanel.tsx`.
 
 ## Phases (14-week plan)
 
@@ -131,7 +142,9 @@ Full plan: `docs/sign_learn.md`
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) runs `pytest` on push/PR to `dev-ml` and `main` branches using Python 3.11 on ubuntu-latest.
+GitHub Actions (`.github/workflows/ci.yml`) runs two jobs on push/PR to `dev-ml`, `dev-web`, and `main`:
+- **test** — Python 3.11, `pytest` (includes LFS checkout for model checkpoint)
+- **frontend** — Node 20, `npm ci && npm run build && npm test`
 
 ## Key Docs
 

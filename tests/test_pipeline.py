@@ -38,7 +38,7 @@ def _pick_fixture() -> Path:
     if not files:
         pytest.skip(
             f"No fixture files found in {test_split}. "
-            "Run: python scripts/generate_test_fixtures.py"
+            "Run: python tests/generate_test_fixtures.py"
         )
     return files[0]
 
@@ -84,7 +84,7 @@ def test_all_fixture_splits_have_files():
         files = list(split_dir.glob("*.npy"))
         assert len(files) > 0, (
             f"Split '{split}' has no fixture files in {split_dir}. "
-            "Run: python scripts/generate_test_fixtures.py"
+            "Run: python tests/generate_test_fixtures.py"
         )
 
 

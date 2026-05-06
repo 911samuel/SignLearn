@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [dev-ml, main]
+    branches: [dev-ml, dev-web, main]
   pull_request:
 
 jobs:
@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - uses: actions/setup-python@v5
         with:
@@ -29,7 +31,7 @@ jobs:
 
       - name: Generate processed test fixtures
         run: |
-          python scripts/generate_test_fixtures.py \
+          python tests/generate_test_fixtures.py \
             --classes a b c \
             --train 30 --val 8 --test 8
 
@@ -43,3 +45,24 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test -- --run

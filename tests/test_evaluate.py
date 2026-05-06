@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from backend.model.architecture import build_lstm
 from backend.model.config import PROCESSED_DIR, TrainConfig, compact_label_map
-from scripts.evaluate_model import evaluate
+from backend.scripts.evaluate_model import evaluate
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "processed_mini"
 

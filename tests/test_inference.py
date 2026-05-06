@@ -42,7 +42,7 @@ def test_output_values_are_probabilities(trained_model):
 
 
 def test_profile_stats_structure():
-    from scripts.profile_inference import profile
+    from backend.scripts.profile_inference import profile
     path = CHECKPOINTS_DIR / "lstm_final.keras"
     if not path.exists():
         pytest.skip("Trained model not found")
