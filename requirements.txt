@@ -10,3 +10,8 @@ matplotlib>=3.8
 seaborn>=0.13
 kaggle
 scipy>=1.12
+tensorboard
+flask>=3.0
+flask-socketio>=5.3
+flask-cors>=4.0
+websocket-client>=1.7

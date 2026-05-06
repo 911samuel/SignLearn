@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SignLearn is a real-time American Sign Language (ASL) recognition system. It uses MediaPipe Hands for landmark extraction and a stacked LSTM model for sequence classification across 75 vocabulary classes (26 letters, 10 digits, 39 common words).
+SignLearn is a real-time American Sign Language (ASL) recognition system. It uses MediaPipe Hands for landmark extraction and a stacked LSTM model for sequence classification across 93 vocabulary classes (26 letters, 10 digits, 24 static words, 33 dynamic words). See `docs/vocabulary.md` for the full list.
 
 **Member A** (this context): ML/AI Lead — data pipeline, model design, training, MediaPipe extraction.  
 **Member B**: Full-Stack + Frontend Lead — Flask backend, WebSocket, React UI, speech-to-text.
@@ -50,29 +50,65 @@ Notes:
 
 **Input → Landmark extraction → Sequence → LSTM → Prediction**
 
-1. Webcam frame → MediaPipe Hands → 21 landmarks × 3 coords = 63 floats per frame
-2. 30 consecutive frames → shape `(30, 63)` float32 array (zero-padded if no hand detected)
-3. Two-layer stacked LSTM → softmax over 75 classes
-4. Target: ≥85% validation accuracy, <500ms inference latency
+1. Webcam frame → MediaPipe Hands → up to 2 hands × 21 landmarks × 3 coords = 126 floats per frame (63 per hand, both hands concatenated; missing hand zero-padded)
+2. 30 consecutive frames → shape `(30, 126)` float32 array (zero-padded if no hand detected)
+3. Two-layer stacked LSTM (128 → 64 units) with Masking → softmax over 93 classes
+4. Target: ≥85% validation accuracy, <500ms inference latency (p95)
 
 Key decision: **No CNN stage.** MediaPipe replaces spatial feature extraction; LSTM handles temporal modeling. This allows real-time CPU inference at ≥30 FPS.
 
 ### Data
 
 - `data/raw/` — static image datasets (ASL Alphabet ~3000 imgs/class, Digits ~100 imgs/class)
-- `data/processed/` — landmark sequences as `.npy` files in shape `(30, 63)`, float32
+- `data/processed/` — landmark sequences as `.npy` files in shape `(30, 126)`, float32
 - `data/external/` — third-party metadata / WLASL subsets
 - `models/` — trained `.h5` model files (gitignored)
 
-**Training data strategy**: Public datasets are static images and have bias issues. Primary approach is custom self-recorded data via `extract_landmarks.py` targeting 50 samples per class (75 × 50 = 3750 total sequences).
+**Training data strategy**: Public datasets are static images and have bias issues. Primary approach is custom self-recorded data via `extract_landmarks.py` targeting 50 samples per class (93 × 50 ≈ 4650 total sequences).
 
 ### Vocabulary
 
-75 classes: `a`–`z`, `0`–`9`, plus 39 words (snake_case). Full list in `docs/vocabulary.md`.
+93 classes: `a`–`z` (26), `0`–`9` (10), 24 static words, 33 dynamic words (all snake_case). Full list in `docs/vocabulary.md`.
 
-### Backend (planned, Phase 3)
+### Backend (Phase 3 — complete)
 
-Flask + Flask-SocketIO server. WebSocket endpoint receives landmark frames, maintains 30-frame sliding window, runs LSTM inference. REST endpoints: `POST /speech-to-text`, `GET /transcript`. SQLite for conversation history.
+Flask + Flask-SocketIO server (`threading` async mode). Landmark frames arrive over WebSocket, a 30-frame sliding window triggers LSTM inference, confident predictions are emitted back and logged to SQLite.
+
+**Running the backend:**
+
+```bash
+# Install backend deps (flask, flask-socketio, flask-cors, websocket-client)
+pip install -r requirements.txt
+
+# Start the dev server on http://127.0.0.1:5001
+python scripts/run_server.py
+
+# End-to-end smoke test (starts its own server subprocess)
+python scripts/e2e_smoke.py
+
+# WebSocket latency profiler (p95 target < 500 ms)
+python scripts/profile_ws.py
+```
+
+**REST endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Server + model status |
+| `POST` | `/speech-to-text` | Log browser STT result `{"text": "..."}` |
+| `GET` | `/transcript?limit=100` | Full session conversation log |
+| `DELETE` | `/transcript?confirm=1` | Clear transcript (dev only) |
+
+**WebSocket events (Member B wire format):**
+
+```
+client → server:  emit("frame",  {"landmarks": [126 floats], "t": <unix ms>})
+server → client:  emit("prediction", {"label": str|null, "confidence": float|null, "ready": bool})
+client → server:  emit("reset")          # clear sliding window
+server → client:  emit("reset_ack", {})
+```
+
+Normalization (`normalize_frame`) runs on the backend — frontend sends raw landmark values.
 
 ### Frontend (planned, Phase 4)
 
