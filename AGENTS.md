@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project
 
-SignLearn is a real-time American Sign Language (ASL) recognition system. It uses MediaPipe Hands for landmark extraction and a stacked LSTM model for sequence classification across 75 vocabulary classes (26 letters, 10 digits, 39 common words).
+SignLearn is a real-time American Sign Language (ASL) recognition system. It uses MediaPipe Hands for landmark extraction and a stacked LSTM model for sequence classification across 93 vocabulary classes (26 letters, 10 digits, 24 static words, 33 dynamic words).
 
 **Member A** (this context): ML/AI Lead — data pipeline, model design, training, MediaPipe extraction.  
 **Member B**: Full-Stack + Frontend Lead — Flask backend, WebSocket, React UI, speech-to-text.
@@ -50,9 +50,9 @@ Notes:
 
 **Input → Landmark extraction → Sequence → LSTM → Prediction**
 
-1. Webcam frame → MediaPipe Hands → 21 landmarks × 3 coords = 63 floats per frame
-2. 30 consecutive frames → shape `(30, 63)` float32 array (zero-padded if no hand detected)
-3. Two-layer stacked LSTM → softmax over 75 classes
+1. Webcam frame → MediaPipe Hands → up to 2 hands × 21 landmarks × 3 coords = 126 floats per frame (63 per hand, both hands concatenated; missing hand zero-padded)
+2. 30 consecutive frames → shape `(30, 126)` float32 array (zero-padded if no hand detected)
+3. Two-layer stacked LSTM → softmax over 93 classes
 4. Target: ≥85% validation accuracy, <500ms inference latency
 
 Key decision: **No CNN stage.** MediaPipe replaces spatial feature extraction; LSTM handles temporal modeling. This allows real-time CPU inference at ≥30 FPS.
@@ -60,15 +60,15 @@ Key decision: **No CNN stage.** MediaPipe replaces spatial feature extraction; L
 ### Data
 
 - `data/raw/` — static image datasets (ASL Alphabet ~3000 imgs/class, Digits ~100 imgs/class)
-- `data/processed/` — landmark sequences as `.npy` files in shape `(30, 63)`, float32
+- `data/processed/` — landmark sequences as `.npy` files in shape `(30, 126)`, float32
 - `data/external/` — third-party metadata / WLASL subsets
 - `models/` — trained `.h5` model files (gitignored)
 
-**Training data strategy**: Public datasets are static images and have bias issues. Primary approach is custom self-recorded data via `extract_landmarks.py` targeting 50 samples per class (75 × 50 = 3750 total sequences).
+**Training data strategy**: Public datasets are static images and have bias issues. Primary approach is custom self-recorded data via `extract_landmarks.py` targeting 50 samples per class (93 × 50 ≈ 4650 total sequences).
 
 ### Vocabulary
 
-75 classes: `a`–`z`, `0`–`9`, plus 39 words (snake_case). Full list in `docs/vocabulary.md`.
+93 classes: `a`–`z` (26), `0`–`9` (10), 24 static words, 33 dynamic words (all snake_case). Full list in `docs/vocabulary.md`.
 
 ### Backend (planned, Phase 3)
 
@@ -100,7 +100,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs `pytest` on push/PR to `dev-ml`
 ## Key Docs
 
 - `docs/sign_learn.md` — full 14-week implementation plan
-- `docs/vocabulary.md` — 75-class label list (ML-ready snake_case)
+- `docs/vocabulary.md` — 93-class label list (ML-ready snake_case)
 - `docs/data_gaps.md` — dataset limitations and fallback strategies
 - `docs/hardware.md` — M2 Pro GPU/CPU strategy (tensorflow-metal)
 - `docs/research_notes.md` — MediaPipe + LSTM architecture justification

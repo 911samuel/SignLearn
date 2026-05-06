@@ -1,5 +1,5 @@
 {
-  "model": "/Users/samuelabayzera/Documents/SignLearn/artifacts/checkpoints/lstm_best.keras",
+  "model": "artifacts/checkpoints/lstm_best.keras",
   "test_samples": 304,
   "num_classes": 10,
   "class_names": [

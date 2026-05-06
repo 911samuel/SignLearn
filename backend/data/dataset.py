@@ -106,6 +106,7 @@ def build_dataset(
         def _py_load(p):
             # tf.numpy_function delivers string tensors as raw bytes objects
             arr = np.load(p.decode() if isinstance(p, bytes) else p.numpy().decode())
+            arr = normalize_sequence(arr.astype(np.float32))
             return arr.astype(np.float32)
         seq = tf.numpy_function(_py_load, [path], tf.float32)
         seq.set_shape([SEQUENCE_LEN, TWO_HAND_DIM])

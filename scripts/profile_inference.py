@@ -75,9 +75,14 @@ def write_profile_report(stats: dict, model_path: Path, reports_dir: Path) -> Pa
     p95 = stats["p95_ms"]
     status = "PASS ✅" if p95 < target_ms else "FAIL ❌"
 
+    try:
+        rel_model = Path(model_path).resolve().relative_to(_REPO_ROOT)
+    except ValueError:
+        rel_model = model_path
+
     report = f"""# Phase 2 — Inference Latency Profile
 
-**Model:** `{model_path}`
+**Model:** `{rel_model}`
 **Device:** {stats.get('device', 'CPU').upper()} (single sample, no batching)
 **Runs:** {stats['n_runs']}
 **Target p95 latency:** < {target_ms:.0f} ms

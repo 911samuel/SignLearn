@@ -7,7 +7,7 @@ The current raw datasets (Alphabet and Digits) consist entirely of **static imag
 
 ## 2. Lack of Sequences
 - **The Gap**: We lack video/sequence data for the signs. MediaPipe landmarks need to be extracted across a time-series (e.g., 30 frames) to train the LSTM.
-- **Problem**: There are no readily available, high-quality open datasets that match our exact 75-label vocabulary in a structured sequence format ready for landmark extraction.
+- **Problem**: There are no readily available, high-quality open datasets that match our exact 93-label vocabulary in a structured sequence format ready for landmark extraction.
 
 ## 3. Background and Lighting Bias
 - **The Gap**: The Kaggle ASL Alphabet dataset is notorious for having very consistent backgrounds per class.
@@ -25,8 +25,8 @@ The current raw datasets (Alphabet and Digits) consist entirely of **static imag
 Given the gaps in existing public data for dynamic ASL signs, we will implement a **Custom Data Collection Pipeline**:
 1. **Tool**: Create a Python script (`collect_data.py`) using OpenCV and MediaPipe.
 2. **Method**: Record 30-frame sequences of landmarks directly to `.npy` or `.csv` files.
-3. **Volume**: Aim for 50 samples per class for all 75 labels.
-4. **Benefit**: This ensures the data perfectly matches our model input shape `(30, 63)` and covers both static and dynamic words consistently.
+3. **Volume**: Aim for 50 samples per class for all 93 labels.
+4. **Benefit**: This ensures the data perfectly matches our model input shape `(30, 126)` (two-hand) and covers both static and dynamic words consistently.
 
 ### Secondary Strategy: Augmentation
 - Artificially create "dynamic" data by applying small translations and rotations to static landmark sets.

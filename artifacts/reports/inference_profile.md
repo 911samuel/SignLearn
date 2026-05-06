@@ -1,6 +1,6 @@
 # Phase 2 — Inference Latency Profile
 
-**Model:** `/Users/samuelabayzera/Documents/SignLearn/artifacts/checkpoints/lstm_best.keras`
+**Model:** `artifacts/checkpoints/lstm_best.keras`
 **Device:** CPU (single sample, no batching)
 **Runs:** 1000
 **Target p95 latency:** < 500 ms

@@ -1,13 +1,14 @@
 """
-Landmark extraction pipeline: webcam → MediaPipe → (30, 63) NumPy sequence.
+Landmark extraction pipeline: webcam → MediaPipe → (30, 126) NumPy sequence.
 
 Usage:
     python scripts/extract_landmarks.py              # saves to default OUTPUT_PATH
     python scripts/extract_landmarks.py --out data/processed/my_sample.npy
     python scripts/extract_landmarks.py --out data/processed/hello/001.npy --frames 30
 
-Output format (aligns with Member B / frontend contract):
-    shape  : (SEQUENCE_LENGTH, LANDMARK_DIM) = (30, 63)
+Output format (aligns with backend WebSocket / training pipeline):
+    shape  : (SEQUENCE_LEN, FEATURE_DIM) = (30, 126)
+    layout : per-frame [left_hand(63) | right_hand(63)]
     values : normalised x,y,z in [0, 1] from MediaPipe
     missing: zero-padded rows when no hand is detected
 
@@ -30,11 +31,12 @@ from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions
 _REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from backend.data.constants import HAND_DIM, SEQUENCE_LEN
+from backend.data.constants import FEATURE_DIM, HAND_DIM, SEQUENCE_LEN
 from backend.data.extract import ensure_model
 
 SEQUENCE_LENGTH = SEQUENCE_LEN   # frames per sample (~1 s at 30 FPS)
-LANDMARK_DIM    = HAND_DIM       # 63 — 21 landmarks × 3 coords (x, y, z)
+LANDMARK_DIM    = HAND_DIM       # 63 — per-hand feature width (21 × 3)
+TWO_HAND_DIM    = FEATURE_DIM    # 126 — both-hands feature width
 OUTPUT_PATH     = "data/processed/sample.npy"
 MODEL_PATH      = _REPO_ROOT / "models" / "hand_landmarker.task"
 
@@ -66,7 +68,11 @@ def extract_row(landmarks) -> np.ndarray:
 
 
 def collect_sequence(cap, landmarker, sequence_length: int, start_ms: int) -> np.ndarray:
-    """Capture `sequence_length` frames and return shape (sequence_length, 63)."""
+    """Capture `sequence_length` frames and return shape (sequence_length, 126).
+
+    Each frame is laid out as [left_hand(63) | right_hand(63)] using MediaPipe's
+    handedness label. Missing hands are zero-padded.
+    """
     frames = []
     prev_time = time.time()
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -83,12 +89,18 @@ def collect_sequence(cap, landmarker, sequence_length: int, start_ms: int) -> np
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-        if result.hand_landmarks:
-            row = extract_row(result.hand_landmarks[0])
-            _draw_landmarks(frame, result.hand_landmarks[0], w, h)
-        else:
-            row = np.zeros(LANDMARK_DIM, dtype=np.float32)
+        left  = np.zeros(LANDMARK_DIM, dtype=np.float32)
+        right = np.zeros(LANDMARK_DIM, dtype=np.float32)
+        for landmarks, handedness_list in zip(result.hand_landmarks, result.handedness):
+            label = handedness_list[0].category_name.lower()  # "left" or "right"
+            row_per_hand = extract_row(landmarks)
+            if label == "left":
+                left = row_per_hand
+            else:
+                right = row_per_hand
+            _draw_landmarks(frame, landmarks, w, h)
 
+        row = np.concatenate([left, right], dtype=np.float32)
         frames.append(row)
 
         now = time.time()
@@ -123,7 +135,7 @@ def main():
     options = HandLandmarkerOptions(
         base_options=base_options,
         running_mode=vision.RunningMode.VIDEO,
-        num_hands=1,
+        num_hands=2,
         min_hand_detection_confidence=0.7,
         min_tracking_confidence=0.5,
     )

@@ -35,10 +35,10 @@
 - Computationally lighter than attention-based transformers for short-to-medium sequences (< 100 frames).
 
 ### What We Will Use
-- **Input shape**: `(sequence_length, feature_size)` → concretely `(30, 63)` — 30 frames, 63 MediaPipe features per frame.
+- **Input shape**: `(sequence_length, feature_size)` → concretely `(30, 126)` — 30 frames, 126 MediaPipe features per frame (two hands × 21 landmarks × 3 coords).
 - **Why LSTM over CNN**: CNNs process spatial features from raw pixels; our pipeline extracts landmarks via MediaPipe, making the spatial step already done. LSTM operates directly on the structured landmark sequence.
-- **Architecture**: Stacked LSTM (2 layers) → Dropout → Dense → Softmax over vocabulary size (75 classes).
-- **Output**: Probability distribution over all 75 vocabulary labels; `argmax` gives the predicted sign.
+- **Architecture**: Stacked LSTM (2 layers) → Dropout → Dense → Softmax over vocabulary size (93 classes).
+- **Output**: Probability distribution over all 93 vocabulary labels; `argmax` gives the predicted sign.
 - **Sequence window**: 30 frames at ~15 FPS ≈ 2 seconds of signing — sufficient for most single-sign gestures.
 
 ---
@@ -55,7 +55,7 @@
 - Raw videos require pose extraction (e.g., via MediaPipe or OpenPose) before any landmark-based model can use them.
 
 ### What We Will Use
-- **Initial scope**: We will NOT use WLASL in the first training iteration — our vocabulary (75 labels) is custom and does not align 1:1 with WLASL classes.
+- **Initial scope**: We will NOT use WLASL in the first training iteration — our vocabulary (93 labels) is custom and does not align 1:1 with WLASL classes.
 - **Primary strategy**: **Custom data collection** — record 30–60 video samples per class using our own MediaPipe extraction pipeline, ensuring consistency in output format.
 - **WLASL as fallback**: For classes with insufficient custom samples, pre-extracted landmark sequences from WLASL100 may be adapted where vocabulary overlaps (e.g., `hello`, `stop`, `help`).
 - **Acknowledged limitation**: Small custom dataset risks overfitting. Mitigation: data augmentation on landmark sequences (temporal jitter, horizontal flip for handedness, scaling noise).
@@ -92,6 +92,6 @@
 | Feature vector | 21 × 3 = 63 values/frame | Fixed-size, translation-invariant after wrist normalization |
 | Sequence length | 30 frames | ~2s window, captures most single-sign gestures |
 | Sequence model | 2-layer LSTM | Temporal modeling on structured data, lightweight |
-| Output | Softmax over 75 classes | Matches `vocabulary.md` label set directly |
+| Output | Softmax over 93 classes | Matches `vocabulary.md` label set directly |
 | Training data | Custom collection + WLASL fallback | Ensures format consistency; avoids dataset mismatch |
 | CNN stage | ❌ Omitted | Replaced by MediaPipe; not needed for landmark pipelines |

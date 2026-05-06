@@ -69,8 +69,13 @@ def evaluate(model_path: Path, data_dir: Path, reports_dir: Path) -> dict:
     recall    = float(recall_score(y_true, y_pred, average="macro", zero_division=0))
     f1        = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
 
+    try:
+        rel_model = str(Path(model_path).resolve().relative_to(_REPO_ROOT))
+    except ValueError:
+        rel_model = str(model_path)
+
     metrics = {
-        "model": str(model_path),
+        "model": rel_model,
         "test_samples": int(len(y_true)),
         "num_classes": len(names),
         "class_names": names,

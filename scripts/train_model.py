@@ -48,7 +48,15 @@ def _remap_labels(ds: tf.data.Dataset, cmap: dict[int, int]) -> tf.data.Dataset:
     )
 
     def _map(seq, label):
-        return seq, lookup.lookup(label)
+        new_label = lookup.lookup(label)
+        # Fail loudly if a split contains a label not present in the compact map.
+        # This catches the case where val/test has classes absent from train,
+        # which would otherwise silently feed -1 into the loss.
+        tf.debugging.assert_greater_equal(
+            new_label, 0,
+            message="_remap_labels: encountered label not in compact map",
+        )
+        return seq, new_label
 
     return ds.map(_map, num_parallel_calls=tf.data.AUTOTUNE)
 

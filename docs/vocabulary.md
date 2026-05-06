@@ -125,4 +125,4 @@
 - **Future Model Outputs**: Labels are designed to serve as the final predicted class names emitted by a trained classifier. Downstream applications (e.g., real-time captioning, mobile UI) can consume these labels directly without additional mapping layers.
 - **Synonym Avoidance**: Similar terms (e.g., `hello` only, not `hi`) are intentionally excluded to prevent class ambiguity during training and reduce inter-class confusion in the model's decision boundary.
 - **Category Rationale**: Static words represent signs that can be reliably classified from a single frame or short clip, while dynamic words require temporal modeling (e.g., LSTMs, transformers, or optical flow) due to motion-dependent articulation.
-- **Total Label Count**: 75 unique labels (26 alphabet + 10 digits + 24 static + 15 dynamic).
+- **Total Label Count**: 93 unique labels (26 alphabet + 10 digits + 24 static + 33 dynamic).

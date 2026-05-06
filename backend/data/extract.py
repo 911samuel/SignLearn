@@ -157,11 +157,22 @@ def to_sequence(frame: np.ndarray, target_len: int = SEQUENCE_LENGTH) -> np.ndar
 # Batch processing
 # ---------------------------------------------------------------------------
 
+# Per-worker landmarker. Initialised once via Pool(initializer=_init_worker)
+# so we don't pay MediaPipe model-load cost on every image.
+_WORKER_LANDMARKER: HandLandmarker | None = None
+
+
+def _init_worker() -> None:
+    """Pool initializer: build one HandLandmarker per worker process."""
+    global _WORKER_LANDMARKER
+    _WORKER_LANDMARKER = _build_landmarker()
+
+
 def _process_one(args: tuple) -> str | None:
     """Worker: extract one image and write .npy. Returns failure message or None."""
     image_path, out_path, label, subject_id, sample_id = args
     try:
-        landmarker = _build_landmarker()
+        landmarker = _WORKER_LANDMARKER if _WORKER_LANDMARKER is not None else _build_landmarker()
         frame = extract_two_hands(image_path, landmarker)
         seq = to_sequence(frame)
 
@@ -227,7 +238,7 @@ def process_dataset(
     print(f"Processing {len(tasks)} images with {workers} workers …")
     failures: list[str] = []
 
-    with mp.Pool(workers) as pool:
+    with mp.Pool(workers, initializer=_init_worker) as pool:
         for result in tqdm(pool.imap_unordered(_process_one, tasks), total=len(tasks)):
             if result is not None:
                 failures.append(result)
