@@ -66,6 +66,10 @@ def train(config: TrainConfig, data_dir: Path, out_dir: Path) -> dict:
     tf.random.set_seed(config.seed)
 
     cmap = compact_label_map(processed_dir=data_dir)
+    # Always derive num_classes from the actual data_dir, not from whatever
+    # TrainConfig defaulted to at construction time (which may differ in CI or
+    # when callers pass a fixture directory).
+    config.num_classes = len(cmap)
 
     train_ds = build_dataset("train", batch_size=config.batch_size, augment=True, processed_dir=data_dir)
     val_ds   = build_dataset("val",   batch_size=config.batch_size, augment=False, processed_dir=data_dir)

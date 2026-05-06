@@ -76,9 +76,19 @@ def run_inference(seq: np.ndarray) -> tuple[str, float]:
 
     model = get_model()
     names = get_class_names()
+    if not names:
+        raise ValueError(
+            "Class name list is empty — no processed data found in data/processed/. "
+            "Run generate_test_fixtures.py and train_model.py to populate it."
+        )
 
     with _lock:
         probs = model.predict(seq[np.newaxis], verbose=0)[0]
 
     idx = int(np.argmax(probs))
+    if idx >= len(names):
+        raise ValueError(
+            f"Model output index {idx} is out of range for class names "
+            f"(got {len(names)} names). Model and label map are mismatched."
+        )
     return names[idx], float(probs[idx])
