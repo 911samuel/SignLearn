@@ -1,0 +1,42 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100svh;
+  background: #0a0a14;
+  color: #e0e0e0;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid #222;
+  background: #0d0d1f;
+}
+
+.app-logo {
+  font-size: 1.5rem;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #00e5ff;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Responsive: stack panels on narrow screens */
+@media (max-width: 800px) {
+  .app-main {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+}
