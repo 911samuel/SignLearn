@@ -24,11 +24,9 @@ data/raw/
 data/processed/
 data/external/
 
-# ── Runtime artifacts ─────────────────────────────────────────────────────────
-artifacts/logs/
-artifacts/*.sqlite
-artifacts/*.db
-artifacts/*.gif
+# ── Runtime artifacts (generated, not tracked) ────────────────────────────────
+artifacts/
+!artifacts/.gitkeep
 
 # ── Test / CI caches ─────────────────────────────────────────────────────────
 .pytest_cache/
