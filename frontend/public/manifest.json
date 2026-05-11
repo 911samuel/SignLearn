@@ -1,0 +1,30 @@
+{
+  "name": "SignLearn — Real-time ASL Translator",
+  "short_name": "SignLearn",
+  "description": "Have a real conversation in American Sign Language and English. Real-time, in your browser.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a14",
+  "theme_color": "#00e5ff",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Start a conversation",
+      "url": "/",
+      "description": "Open a new translation session"
+    },
+    {
+      "name": "Practice mode",
+      "url": "/practice",
+      "description": "Practice signs solo — no one else can see you"
+    }
+  ]
+}

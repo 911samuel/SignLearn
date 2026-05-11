@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from backend.model.config import ARTIFACTS_DIR, PROCESSED_DIR, TrainConfig
-from scripts.train_model import train
+from backend.scripts.train_model import train
 
 # Use the pre-built processed fixtures so the smoke test is self-contained and
 # never depends on data/processed/ being populated by a prior extraction run.
@@ -44,7 +44,7 @@ def test_train_label_remapping_stays_in_range():
     import tensorflow as tf
     from backend.data.dataset import build_dataset
     from backend.model.config import compact_label_map
-    from scripts.train_model import _remap_labels
+    from backend.scripts.train_model import _remap_labels
 
     data_dir = _FIXTURE_DIR if _FIXTURE_DIR.exists() else PROCESSED_DIR
     cmap = compact_label_map(processed_dir=data_dir)

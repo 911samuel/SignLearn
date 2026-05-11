@@ -54,7 +54,7 @@ class TestShapeContract:
 
     @pytest.mark.parametrize("name,fn", transforms)
     def test_wrong_shape_raises(self, name, fn):
-        with pytest.raises(AssertionError):
+        with pytest.raises((AssertionError, ValueError)):
             fn(np.zeros((T, 63), dtype=np.float32))
 
 
