@@ -15,7 +15,8 @@ WRIST_IDX    = 0              # landmark index of the wrist
 
 def _split_hands(frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Split a (126,) frame into two (21, 3) arrays (left, right)."""
-    assert frame.shape == (TWO_HAND_DIM,), f"Expected ({TWO_HAND_DIM},), got {frame.shape}"
+    if frame.shape != (TWO_HAND_DIM,):
+        raise ValueError(f"Expected ({TWO_HAND_DIM},), got {frame.shape}")
     left  = frame[:HAND_DIM].reshape(N_LANDMARKS, COORDS)
     right = frame[HAND_DIM:].reshape(N_LANDMARKS, COORDS)
     return left, right
@@ -23,7 +24,7 @@ def _split_hands(frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def _merge_hands(left: np.ndarray, right: np.ndarray) -> np.ndarray:
     """Merge two (21, 3) arrays back into a (126,) frame."""
-    return np.concatenate([left.flatten(), right.flatten()], dtype=np.float32)
+    return np.concatenate([left.flatten(), right.flatten()]).astype(np.float32)
 
 
 def _hand_is_empty(hand: np.ndarray) -> bool:
@@ -87,9 +88,8 @@ def normalize_frame(frame: np.ndarray) -> np.ndarray:
 
 def normalize_sequence(seq: np.ndarray) -> np.ndarray:
     """Apply normalize_frame to every frame in a (T, 126) sequence."""
-    assert seq.ndim == 2 and seq.shape[1] == TWO_HAND_DIM, (
-        f"Expected (T, {TWO_HAND_DIM}), got {seq.shape}"
-    )
+    if seq.ndim != 2 or seq.shape[1] != TWO_HAND_DIM:
+        raise ValueError(f"Expected (T, {TWO_HAND_DIM}), got {seq.shape}")
     return np.stack([normalize_frame(f) for f in seq], axis=0).astype(np.float32)
 
 
@@ -100,9 +100,8 @@ def interpolate_to_length(seq: np.ndarray, target_len: int = SEQUENCE_LEN) -> np
     T == target_len this is a no-op (returns a copy). Implemented for the
     future video path where T may differ.
     """
-    assert seq.ndim == 2 and seq.shape[1] == TWO_HAND_DIM, (
-        f"Expected (T, {TWO_HAND_DIM}), got {seq.shape}"
-    )
+    if seq.ndim != 2 or seq.shape[1] != TWO_HAND_DIM:
+        raise ValueError(f"Expected (T, {TWO_HAND_DIM}), got {seq.shape}")
     T = seq.shape[0]
     if T == target_len:
         return seq.astype(np.float32)

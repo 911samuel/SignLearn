@@ -31,7 +31,7 @@ export function SignerView({ socket, captions, peerPresent, roomId, onPrediction
   const [camStatus, setCamStatus] = useState<CamStatus>("pending");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
-  const { prediction, landmarkerResult, reset, paused, togglePaused, latencyMs } =
+  const { prediction, landmarkerResult, reset, paused, togglePaused, latencyMs, landmarkerError } =
     useSignRecognition(videoRef, socket);
 
   // Signer is the WebRTC initiator (polite peer).
@@ -106,6 +106,11 @@ export function SignerView({ socket, captions, peerPresent, roomId, onPrediction
         {camStatus === "lost" && (
           <p style={styles.error} role="alert">
             Camera disconnected — reconnect and reload.
+          </p>
+        )}
+        {landmarkerError && (
+          <p style={styles.error} role="alert">
+            MediaPipe failed to load: {landmarkerError}
           </p>
         )}
         {camStatus === "ok" && (

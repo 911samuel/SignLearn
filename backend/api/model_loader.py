@@ -79,6 +79,15 @@ def get_load_error() -> str | None:
     return _load_error
 
 
+def _reset_for_testing() -> None:
+    """Reset module state. Only call from test fixtures."""
+    global _model, _class_names, _load_error
+    with _lock:
+        _model = None
+        _class_names = None
+        _load_error = None
+
+
 def run_inference(seq: np.ndarray) -> tuple[str, float]:
     """Run a single sequence through the model under the global lock.
 

@@ -7,6 +7,7 @@ import { SignerView } from "@/components/SignerView";
 import { HearingView } from "@/components/HearingView";
 import { ConversationLog, type LogEntry } from "@/components/ConversationLog";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { RoomErrorBoundary } from "@/components/RoomErrorBoundary";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:5001";
 
@@ -71,7 +72,7 @@ function RoomInner({ roomId, role, name, onLeave }: RoomInnerProps) {
         }));
         setLog(hydrated);
       })
-      .catch(() => {});
+      .catch((err) => console.warn("[RoomPage] transcript fetch failed:", err));
   }, [roomId]);
 
   useEffect(() => {
@@ -122,22 +123,24 @@ function RoomInner({ roomId, role, name, onLeave }: RoomInnerProps) {
       )}
 
       <main style={styles.main}>
-        {role === "signer" ? (
-          <SignerView
-            socket={socket}
-            captions={captions}
-            peerPresent={peerPresent}
-            roomId={roomId}
-            onPrediction={handlePrediction}
-          />
-        ) : (
-          <HearingView
-            socket={socket}
-            captions={captions}
-            peerPresent={peerPresent}
-            onSpeech={handleSpeech}
-          />
-        )}
+        <RoomErrorBoundary onLeave={onLeave}>
+          {role === "signer" ? (
+            <SignerView
+              socket={socket}
+              captions={captions}
+              peerPresent={peerPresent}
+              roomId={roomId}
+              onPrediction={handlePrediction}
+            />
+          ) : (
+            <HearingView
+              socket={socket}
+              captions={captions}
+              peerPresent={peerPresent}
+              onSpeech={handleSpeech}
+            />
+          )}
+        </RoomErrorBoundary>
       </main>
 
       <ConversationLog entries={log} roomId={roomId} />

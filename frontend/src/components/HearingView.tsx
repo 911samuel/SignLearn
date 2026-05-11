@@ -87,10 +87,11 @@ export function HearingView({ socket, captions, peerPresent, onSpeech }: Hearing
   }
 
   const pressStart = (e: React.PointerEvent) => {
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    (e.target as Element).setPointerCapture(e.pointerId);
     if (!listening) start();
   };
-  const pressEnd = () => {
+  const pressEnd = (e: React.PointerEvent) => {
+    (e.target as Element).releasePointerCapture(e.pointerId);
     if (listening) stop();
   };
 
@@ -127,7 +128,7 @@ export function HearingView({ socket, captions, peerPresent, onSpeech }: Hearing
           onPointerDown={pressStart}
           onPointerUp={pressEnd}
           onPointerCancel={pressEnd}
-          onPointerLeave={pressEnd}
+          onPointerLeave={(e) => { if (listening) { (e.target as Element).releasePointerCapture(e.pointerId); stop(); } }}
           style={{
             ...styles.micBtn,
             background: listening ? "var(--danger)" : "var(--primary)",

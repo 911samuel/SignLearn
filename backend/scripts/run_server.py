@@ -6,12 +6,15 @@ Usage:
 
 from __future__ import annotations
 
-# eventlet monkey-patch must happen before any other network imports.
-import eventlet
-eventlet.monkey_patch()
-
+import os
 import sys
 from pathlib import Path
+
+# eventlet monkey-patch must happen before any other network imports,
+# but only when actually using eventlet (not threading mode used in tests).
+if os.environ.get("SIGNLEARN_ASYNC_MODE", "eventlet") == "eventlet":
+    import eventlet
+    eventlet.monkey_patch()
 
 # Ensure repo root is on sys.path when the script is run directly.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -20,9 +23,11 @@ if str(_REPO_ROOT) not in sys.path:
 
 from backend.api.app import create_app
 from backend.api.config import CONFIG
+from backend.api import model_loader
 
 
 def main() -> None:
+    model_loader.load_model()
     app, socketio = create_app()
     socketio.run(
         app,

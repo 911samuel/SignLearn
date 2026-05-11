@@ -170,7 +170,7 @@ class TestNormalizeFrame:
         )
 
     def test_wrong_shape_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises((AssertionError, ValueError)):
             normalize_frame(np.zeros(63, dtype=np.float32))
 
 
@@ -193,7 +193,7 @@ class TestNormalizeSequence:
         assert not np.isnan(normalize_sequence(self._make_seq())).any()
 
     def test_wrong_shape_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises((AssertionError, ValueError)):
             normalize_sequence(np.zeros((30, 63), dtype=np.float32))
 
     def test_per_frame_independence(self):
@@ -235,7 +235,7 @@ class TestInterpolate:
         np.testing.assert_allclose(result[-1], seq[-1], atol=1e-5)
 
     def test_wrong_shape_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises((AssertionError, ValueError)):
             interpolate_to_length(np.zeros((30, 63)), 30)
 
 

@@ -9,6 +9,7 @@ python backend/scripts/train_model.py --data-dir data/processed --out-dir artifa
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ _REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.data.dataset import build_dataset
+from backend.data.label_map import load_label_map
 from backend.model.architecture import build_lstm
 from backend.model.config import (
     ARTIFACTS_DIR,
@@ -28,6 +30,9 @@ from backend.model.config import (
     TrainConfig,
     compact_label_map,
 )
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+_log = logging.getLogger(__name__)
 
 
 def _remap_labels(ds: tf.data.Dataset, cmap: dict[int, int]) -> tf.data.Dataset:
@@ -70,6 +75,15 @@ def train(config: TrainConfig, data_dir: Path, out_dir: Path) -> dict:
     # TrainConfig defaulted to at construction time (which may differ in CI or
     # when callers pass a fixture directory).
     config.num_classes = len(cmap)
+
+    full_vocab_size = len(load_label_map())
+    if len(cmap) < full_vocab_size:
+        missing = full_vocab_size - len(cmap)
+        _log.warning(
+            "Training on %d/%d classes — %d classes have no data in %s. "
+            "Run extract_landmarks.py to collect samples for the remaining classes.",
+            len(cmap), full_vocab_size, missing, data_dir,
+        )
 
     train_ds = build_dataset("train", batch_size=config.batch_size, augment=True, processed_dir=data_dir)
     val_ds   = build_dataset("val",   batch_size=config.batch_size, augment=False, processed_dir=data_dir)

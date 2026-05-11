@@ -76,6 +76,15 @@ def init_db() -> None:
         con.execute(
             "CREATE INDEX IF NOT EXISTS idx_corrections_room_id ON corrections(room_id)"
         )
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS feedback (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts        TEXT    NOT NULL,
+                category  TEXT    NOT NULL,
+                text      TEXT    NOT NULL,
+                room_id   TEXT
+            )
+        """)
 
 
 def _now_iso() -> str:
@@ -114,15 +123,6 @@ def append_feedback(
     """Log a user's feedback message and return its id."""
     init_db()
     with _conn() as con:
-        con.execute("""
-            CREATE TABLE IF NOT EXISTS feedback (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                ts        TEXT    NOT NULL,
-                category  TEXT    NOT NULL,
-                text      TEXT    NOT NULL,
-                room_id   TEXT
-            )
-        """)
         cur = con.execute(
             "INSERT INTO feedback (ts, category, text, room_id) VALUES (?, ?, ?, ?)",
             (_now_iso(), category, text, room_id),

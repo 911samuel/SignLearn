@@ -42,10 +42,13 @@ def _wait_for_server(url: str, timeout: float = 25.0) -> None:
 
 @pytest.fixture(scope="session")
 def server():
+    import os
+    env = {**os.environ, "SIGNLEARN_ASYNC_MODE": "threading", "FLASK_DEBUG": "1"}
     proc = subprocess.Popen(
         [sys.executable, str(REPO_ROOT / "backend" / "scripts" / "run_server.py")],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=env,
     )
     _wait_for_server(BASE_URL)
     yield BASE_URL

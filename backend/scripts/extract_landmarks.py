@@ -100,7 +100,7 @@ def collect_sequence(cap, landmarker, sequence_length: int, start_ms: int) -> np
                 right = row_per_hand
             _draw_landmarks(frame, landmarks, w, h)
 
-        row = np.concatenate([left, right], dtype=np.float32)
+        row = np.concatenate([left, right]).astype(np.float32)
         frames.append(row)
 
         now = time.time()

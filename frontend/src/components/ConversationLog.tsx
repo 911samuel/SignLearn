@@ -31,7 +31,7 @@ export function ConversationLog({ entries, roomId }: ConversationLogProps) {
   useEffect(() => {
     if (!menuOpen) return;
     const handler = () => setMenuOpen(false);
-    window.addEventListener("click", handler, { capture: true, once: true });
+    window.addEventListener("click", handler, { capture: true });
     return () => window.removeEventListener("click", handler, { capture: true });
   }, [menuOpen]);
 

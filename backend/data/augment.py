@@ -33,9 +33,8 @@ def _merge(left: np.ndarray, right: np.ndarray) -> np.ndarray:
 
 
 def _assert_seq(seq: np.ndarray) -> None:
-    assert seq.ndim == 2 and seq.shape[1] == TWO_HAND_DIM, (
-        f"Expected (T, {TWO_HAND_DIM}), got {seq.shape}"
-    )
+    if seq.ndim != 2 or seq.shape[1] != TWO_HAND_DIM:
+        raise ValueError(f"Expected (T, {TWO_HAND_DIM}), got {seq.shape}")
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +99,8 @@ def translate(seq: np.ndarray, shift: np.ndarray) -> np.ndarray:
         (T, 126) float32
     """
     _assert_seq(seq)
-    assert shift.shape in ((2,), (3,)), f"shift must be (2,) or (3,), got {shift.shape}"
+    if shift.shape not in ((2,), (3,)):
+        raise ValueError(f"shift must be (2,) or (3,), got {shift.shape}")
 
     left, right = _split(seq)   # each (T, 21, 3)
 
@@ -130,6 +130,27 @@ def gaussian_noise(seq: np.ndarray, sigma: float = 0.01, rng=None) -> np.ndarray
     rng = rng or np.random.default_rng()
     noise = rng.normal(0, sigma, size=seq.shape).astype(np.float32)
     return (seq + noise).astype(np.float32)
+
+
+def flip(seq: np.ndarray) -> np.ndarray:
+    """Mirror the sequence horizontally to simulate a left-handed signer.
+
+    Negates the x-coordinate of every landmark and swaps the left and right
+    hand channels so the model sees a physically consistent mirrored signing.
+
+    Args:
+        seq: (T, 126) float32 — normalised, layout [left(63) | right(63)]
+
+    Returns:
+        (T, 126) float32
+    """
+    _assert_seq(seq)
+    left, right = _split(seq)   # each (T, 21, 3)
+    # Mirror x (index 0) for each hand.
+    left_flipped  = left.copy();  left_flipped[..., 0]  *= -1
+    right_flipped = right.copy(); right_flipped[..., 0] *= -1
+    # Swap channels: what was the right hand becomes the left and vice versa.
+    return _merge(right_flipped, left_flipped)
 
 
 def drop_frames(seq: np.ndarray, p: float = 0.1, rng=None) -> np.ndarray:
@@ -163,6 +184,7 @@ _DEFAULT_PROBS = {
     "translate": 0.5,
     "noise":     0.8,
     "drop":      0.3,
+    "flip":      0.5,
 }
 
 # Param ranges — sampled uniformly within each range
@@ -220,5 +242,8 @@ def random_augment(
 
     if rng.random() < probs["drop"]:
         out = drop_frames(out, p=ranges["drop_p"], rng=rng)
+
+    if rng.random() < probs["flip"]:
+        out = flip(out)
 
     return out

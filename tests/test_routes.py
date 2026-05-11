@@ -10,12 +10,14 @@ from backend.api.app import create_app
 
 @pytest.fixture
 def client(tmp_path):
+    from backend.api import model_loader
+    from backend.api.config import CONFIG
+    model_loader._reset_for_testing()
     storage.set_db_path(tmp_path / "test.sqlite")
     app, _socketio = create_app()
     app.config.update(TESTING=True)
     with app.test_client() as c:
         yield c
-    from backend.api.config import CONFIG
     storage.set_db_path(CONFIG.db_path)
 
 

@@ -36,31 +36,43 @@ export function useSignRecognition(
   const [landmarkerResult, setLandmarkerResult] = useState<HandLandmarkerResult | null>(null);
   const [paused, setPaused] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [landmarkerError, setLandmarkerError] = useState<string | null>(null);
 
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastVideoTimeRef = useRef(-1);
   const pausedRef = useRef(false);
   const lastFrameTsRef = useRef<number>(0);
+  // Keep a ref to socket so the rAF loop always uses the current value.
+  const socketRef = useRef<Socket | null>(socket);
+  useEffect(() => { socketRef.current = socket; }, [socket]);
 
   // Initialise MediaPipe HandLandmarker
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-      );
-      const landmarker = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
-          delegate: "GPU",
-        },
-        runningMode: "VIDEO",
-        numHands: 2,
-      });
-      if (!cancelled) landmarkerRef.current = landmarker;
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+        );
+        const landmarker = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numHands: 2,
+        });
+        if (!cancelled) landmarkerRef.current = landmarker;
+      } catch (err) {
+        if (!cancelled) {
+          setLandmarkerError(
+            err instanceof Error ? err.message : "Failed to load MediaPipe — check your network connection."
+          );
+        }
+      }
     }
 
     init();
@@ -91,8 +103,9 @@ export function useSignRecognition(
       rafRef.current = requestAnimationFrame(tick);
       const video = videoRef.current;
       const landmarker = landmarkerRef.current;
+      const sock = socketRef.current;
 
-      if (!video || !landmarker || !socket || video.readyState < 2) return;
+      if (!video || !landmarker || !sock || video.readyState < 2) return;
       if (video.currentTime === lastVideoTimeRef.current) return;
       lastVideoTimeRef.current = video.currentTime;
 
@@ -105,7 +118,7 @@ export function useSignRecognition(
       if (!pausedRef.current) {
         const landmarks = flattenLandmarks(result);
         lastFrameTsRef.current = Date.now();
-        socket.emit("frame", { landmarks, t: lastFrameTsRef.current });
+        sock.emit("frame", { landmarks, t: lastFrameTsRef.current });
       }
     }
 
@@ -113,7 +126,7 @@ export function useSignRecognition(
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [videoRef, socket]);
+  }, [videoRef]);
 
   const reset = useCallback(() => {
     socket?.emit("reset");
@@ -127,7 +140,7 @@ export function useSignRecognition(
     });
   }, []);
 
-  return { prediction, landmarkerResult, reset, paused, togglePaused, latencyMs };
+  return { prediction, landmarkerResult, reset, paused, togglePaused, latencyMs, landmarkerError };
 }
 
 // Flatten up to 2 hands into a fixed-length 126-float array.

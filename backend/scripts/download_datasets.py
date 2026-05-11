@@ -53,14 +53,11 @@ def download(name: str, info: dict) -> None:
 
     dest.mkdir(parents=True, exist_ok=True)
     print(f"[{name}] Downloading {info['slug']} → {dest} ...")
-    result = subprocess.run(
+    subprocess.run(
         [sys.executable, "-m", "kaggle", "datasets", "download",
          "-d", info["slug"], "-p", str(dest), "--unzip"],
-        check=False,
+        check=True,
     )
-    if result.returncode != 0:
-        print(f"[{name}] Download failed. Check your Kaggle credentials and dataset slug.")
-        return
 
     # Remove leftover zip if unzip didn't clean up
     for z in dest.glob("*.zip"):
