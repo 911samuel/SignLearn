@@ -75,6 +75,7 @@ def run(url: str, total_frames: int, start_server: bool) -> list[float]:
     # Queue of send-timestamps for window-completing frames (every 30th frame).
     window_send_times: list[float] = []
     lock = threading.Lock()
+    joined = threading.Event()
 
     @sio.on("prediction")
     def on_prediction(data):
@@ -86,7 +87,17 @@ def run(url: str, total_frames: int, start_server: bool) -> list[float]:
                 send_ts = window_send_times.pop(0)
                 latencies_ms.append((recv_ts - send_ts) * 1000)
 
+    sio.on("join_ok", lambda *_: joined.set())
+
+    # Allocate a room and join as Signer so frame events are accepted.
+    import urllib.request
+    room_req = urllib.request.Request(f"{url}/rooms", method="POST")
+    room_id = json.loads(urllib.request.urlopen(room_req).read())["room_id"]
+
     sio.connect(url)
+    sio.emit("join_room", {"room_id": room_id, "role": "signer", "name": "profiler"})
+    if not joined.wait(timeout=5.0):
+        raise RuntimeError("Profiler failed to join room as signer")
     sio.emit("reset")
     time.sleep(0.1)
 

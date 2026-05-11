@@ -1,4 +1,17 @@
-# ML artifacts
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+.eggs/
+pip-log.txt
+.env
+.venv/
+venv/
+ENV/
+
+# ── ML artifacts ─────────────────────────────────────────────────────────────
 models/
 *.h5
 *.pkl
@@ -6,74 +19,48 @@ models/
 *.pth
 *.keras
 
-# Data (keep README)
+# ── Data (keep READMEs) ───────────────────────────────────────────────────────
 data/raw/
 data/processed/
 data/external/
 
-# TensorBoard logs
+# ── Runtime artifacts ─────────────────────────────────────────────────────────
 artifacts/logs/
-
-# Runtime artifacts
 artifacts/*.sqlite
-artifacts/*.gif
 artifacts/*.db
+artifacts/*.gif
 
-# Python
-__pycache__/
-*.pyc
-*.egg-info/
-venv/
-.venv/
-.env
+# ── Test / CI caches ─────────────────────────────────────────────────────────
+.pytest_cache/
+coverage/
+*.log
 
-# Node
+# ── Node / Next.js ───────────────────────────────────────────────────────────
 node_modules/
+frontend/.next/
+frontend/next-env.d.ts
 dist/
 build/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# macOS
-.DS_Store
-# Python
-__pycache__/
-*.py[cod]
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
-.env
-.venv
-ENV/
-venv/
-*.pyo
-*.pyd
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Node
-node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
-yarn.lock
-.pnpm-debug.log*
 
-# Common
-.DS_Store
-.env.*
+# ── Environment secrets ───────────────────────────────────────────────────────
+.env.local
+.env.*.local
+frontend/.env.local
+frontend/.env.*.local
+
+# ── Editor / IDE ─────────────────────────────────────────────────────────────
 .idea/
 .vscode/
-coverage/
-*.log
 *.sqlite3
 
-# OS
+# ── Claude Code local config ─────────────────────────────────────────────────
+.claude/
+frontend/.claude/
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
 Thumbs.db
 Desktop.ini

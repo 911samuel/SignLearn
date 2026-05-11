@@ -4,9 +4,8 @@ import {
   FilesetResolver,
   type HandLandmarkerResult,
 } from "@mediapipe/tasks-vision";
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://127.0.0.1:5001";
 const FEATURE_DIM = 126; // 2 hands × 21 landmarks × 3 coords
 
 export interface Prediction {
@@ -15,29 +14,36 @@ export interface Prediction {
   ready: boolean;
 }
 
-export type ConnectionStatus = "connected" | "disconnected" | "reconnecting";
+export type { ConnectionStatus } from "./useRoom";
 
-export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | null>) {
+/**
+ * Runs MediaPipe hand-landmark extraction in-browser and streams the
+ * resulting 126-float vectors over an externally-supplied Socket.IO
+ * connection. Prediction events come back through the same socket.
+ *
+ * `socket` may be null on first render (before the room hook connects);
+ * the effect simply waits until it's available.
+ */
+export function useSignRecognition(
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+  socket: Socket | null,
+) {
   const [prediction, setPrediction] = useState<Prediction>({
     label: null,
     confidence: null,
     ready: false,
   });
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [landmarkerResult, setLandmarkerResult] = useState<HandLandmarkerResult | null>(null);
   const [paused, setPaused] = useState(false);
-
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   const landmarkerRef = useRef<HandLandmarker | null>(null);
-  const socketRef = useRef<Socket | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastVideoTimeRef = useRef(-1);
   const pausedRef = useRef(false);
-  // Timestamp of the last emitted frame — used to measure capture-to-display latency
   const lastFrameTsRef = useRef<number>(0);
 
-  // Initialise MediaPipe HandLandmarker (WASM, runs in-browser)
+  // Initialise MediaPipe HandLandmarker
   useEffect(() => {
     let cancelled = false;
 
@@ -64,34 +70,27 @@ export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | 
     };
   }, []);
 
-  // WebSocket connection
+  // Listen for prediction events on the shared socket
   useEffect(() => {
-    const socket = io(BACKEND_URL, { transports: ["websocket"] });
-    socketRef.current = socket;
-
-    socket.on("connect", () => setConnectionStatus("connected"));
-    socket.on("disconnect", () => setConnectionStatus("disconnected"));
-    socket.on("reconnect_attempt", () => setConnectionStatus("reconnecting"));
-    socket.on("reconnect", () => setConnectionStatus("connected"));
-    socket.on("prediction", (data: Prediction) => {
+    if (!socket) return;
+    const handler = (data: Prediction) => {
       if (data.ready && lastFrameTsRef.current) {
         setLatencyMs(Date.now() - lastFrameTsRef.current);
       }
       setPrediction(data);
-    });
-
-    return () => {
-      socket.disconnect();
     };
-  }, []);
+    socket.on("prediction", handler);
+    return () => {
+      socket.off("prediction", handler);
+    };
+  }, [socket]);
 
-  // rAF loop: extract landmarks → emit frame
+  // rAF loop: extract landmarks → emit
   useEffect(() => {
     function tick() {
       rafRef.current = requestAnimationFrame(tick);
       const video = videoRef.current;
       const landmarker = landmarkerRef.current;
-      const socket = socketRef.current;
 
       if (!video || !landmarker || !socket || video.readyState < 2) return;
       if (video.currentTime === lastVideoTimeRef.current) return;
@@ -114,12 +113,12 @@ export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | 
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [videoRef]);
+  }, [videoRef, socket]);
 
   const reset = useCallback(() => {
-    socketRef.current?.emit("reset");
+    socket?.emit("reset");
     setPrediction({ label: null, confidence: null, ready: false });
-  }, []);
+  }, [socket]);
 
   const togglePaused = useCallback(() => {
     setPaused((p) => {
@@ -128,11 +127,10 @@ export function useSignRecognition(videoRef: React.RefObject<HTMLVideoElement | 
     });
   }, []);
 
-  return { prediction, connectionStatus, landmarkerResult, reset, paused, togglePaused, latencyMs };
+  return { prediction, landmarkerResult, reset, paused, togglePaused, latencyMs };
 }
 
 // Flatten up to 2 hands into a fixed-length 126-float array.
-// Hand 0 → indices 0–62, hand 1 → indices 63–125. Missing hand → zeros.
 function flattenLandmarks(result: HandLandmarkerResult): number[] {
   const out = new Array<number>(FEATURE_DIM).fill(0);
   for (let h = 0; h < Math.min(result.landmarks.length, 2); h++) {

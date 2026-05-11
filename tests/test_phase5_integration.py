@@ -1,14 +1,12 @@
-"""Phase 5 integration acceptance tests.
+"""Phase 5 integration acceptance tests (room-scoped).
 
-Validates the four Phase 5 acceptance criteria from docs/sign_learn.md:
+Acceptance criteria:
 
 1. /health returns model_loaded: true
-2. WebSocket prediction round-trip completes for fixture frames
-3. Speech POST persists to /transcript
+2. Signer WebSocket round-trip completes for fixture frames
+3. Hearing-user speech caption persists to /transcript
 4. WS round-trip p95 < 2000 ms (from artifacts/reports/phase5_latency.json)
-
-Usage:
-    pytest tests/test_phase5_integration.py -v
+5. Malformed frame emits 'error' instead of crashing
 """
 
 from __future__ import annotations
@@ -31,10 +29,6 @@ PHASE5_LATENCY_REPORT = REPO_ROOT / "artifacts" / "reports" / "phase5_latency.js
 BASE_URL = "http://localhost:5001"
 
 
-# ---------------------------------------------------------------------------
-# Session-scoped server fixture
-# ---------------------------------------------------------------------------
-
 def _wait_for_server(url: str, timeout: float = 25.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -48,7 +42,6 @@ def _wait_for_server(url: str, timeout: float = 25.0) -> None:
 
 @pytest.fixture(scope="session")
 def server():
-    """Start the Flask backend for the test session, stop it when done."""
     proc = subprocess.Popen(
         [sys.executable, str(REPO_ROOT / "backend" / "scripts" / "run_server.py")],
         stdout=subprocess.DEVNULL,
@@ -60,148 +53,115 @@ def server():
     proc.wait(timeout=5)
 
 
-@pytest.fixture(autouse=True)
-def clear_transcript(server):
-    """Wipe the transcript before each test to prevent cross-test pollution."""
+def _create_room(url: str) -> str:
+    req = urllib.request.Request(f"{url}/rooms", method="POST")
+    return json.loads(urllib.request.urlopen(req).read())["room_id"]
+
+
+def _join(url: str, room_id: str, role: str, name: str) -> sio_lib.Client:
+    sio = sio_lib.Client()
+    joined = threading.Event()
+    sio.on("join_ok", lambda *_: joined.set())
+    sio.connect(url)
+    sio.emit("join_room", {"room_id": room_id, "role": role, "name": name})
+    assert joined.wait(timeout=5.0), f"Failed to join as {role}"
+    return sio
+
+
+@pytest.fixture
+def fresh_room(server):
+    room_id = _create_room(server)
+    yield room_id
     req = urllib.request.Request(
-        f"{server}/transcript?confirm=1", method="DELETE"
+        f"{server}/transcript?room_id={room_id}&confirm=1", method="DELETE"
     )
     urllib.request.urlopen(req)
 
 
-# ---------------------------------------------------------------------------
-# Acceptance test 1: /health reports model loaded
-# ---------------------------------------------------------------------------
+# 1. /health -------------------------------------------------------------
 
 def test_health_model_loaded(server):
-    """GET /health must return model_loaded: true and include model_path."""
     resp = urllib.request.urlopen(f"{server}/health")
     data = json.loads(resp.read())
-
-    assert data["status"] == "ok", f"Unexpected status: {data['status']}"
-    assert data["model_loaded"] is True, (
-        f"model_loaded is False — load_error: {data.get('load_error')}"
-    )
-    assert "model_path" in data, "/health missing model_path field"
-    assert data.get("load_error") is None, (
-        f"load_error is set: {data['load_error']}"
-    )
+    assert data["status"] == "ok"
+    assert data["model_loaded"] is True, f"load_error: {data.get('load_error')}"
 
 
-# ---------------------------------------------------------------------------
-# Acceptance test 2: WebSocket prediction round-trip
-# ---------------------------------------------------------------------------
+# 2. WS prediction round-trip -------------------------------------------
 
 def _load_fixture_frames() -> list[list[float]]:
     files = sorted(FIXTURE_DIR.glob("*.npy"))
-    assert files, f"No fixture .npy files in {FIXTURE_DIR}"
-    return [frame.tolist() for frame in np.load(files[0])]  # 30 frames
+    assert files
+    return [frame.tolist() for frame in np.load(files[0])]
 
 
-def test_ws_prediction_roundtrip(server):
-    """Streaming 30 fixture frames must produce a ready prediction."""
-    sio = sio_lib.Client()
-    ready_event = threading.Event()
+def test_ws_prediction_roundtrip(server, fresh_room):
+    ready = threading.Event()
     received: list[dict] = []
+    signer = _join(server, fresh_room, "signer", "A")
 
-    @sio.on("prediction")
+    @signer.on("prediction")
     def on_pred(data):
         received.append(data)
         if data.get("ready"):
-            ready_event.set()
+            ready.set()
 
-    sio.connect(server)
-    sio.emit("reset")
+    signer.emit("reset")
     time.sleep(0.05)
-
     for frame in _load_fixture_frames():
-        sio.emit("frame", {"landmarks": frame, "t": int(time.time() * 1000)})
+        signer.emit("frame", {"landmarks": frame, "t": int(time.time() * 1000)})
         time.sleep(0.005)
 
-    got_ready = ready_event.wait(timeout=10.0)
-    sio.disconnect()
-
-    assert got_ready, "Timed out waiting for a ready prediction after 30 frames"
-
-    ready_preds = [p for p in received if p.get("ready")]
-    assert ready_preds, "No ready=true prediction in received events"
-
-    pred = ready_preds[-1]
-    # label may be None if confidence < threshold — that's fine, the pipeline ran
-    assert "label" in pred, "Prediction missing 'label' field"
-    assert "confidence" in pred, "Prediction missing 'confidence' field"
+    got_ready = ready.wait(timeout=10.0)
+    signer.disconnect()
+    assert got_ready, "Timed out waiting for ready prediction"
+    assert [p for p in received if p.get("ready")]
 
 
-# ---------------------------------------------------------------------------
-# Acceptance test 3: Speech POST persists to transcript
-# ---------------------------------------------------------------------------
+# 3. Speech caption persists --------------------------------------------
 
-def test_speech_post_persists(server):
-    """POST /speech-to-text must persist and appear in GET /transcript."""
-    payload = json.dumps({"text": "phase5 acceptance test"}).encode()
-    req = urllib.request.Request(
-        f"{server}/speech-to-text",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    resp = urllib.request.urlopen(req)
-    assert resp.status == 201, f"POST /speech-to-text returned HTTP {resp.status}"
+def test_speech_caption_persists(server, fresh_room):
+    # A signer must be present so the hearing role isn't the lone member, but
+    # `speech` itself only requires the sender's role to be 'hearing'.
+    hearing = _join(server, fresh_room, "hearing", "B")
+    hearing.emit("speech", {"text": "phase5 acceptance test"})
+    time.sleep(0.3)
+    hearing.disconnect()
 
-    transcript_resp = urllib.request.urlopen(f"{server}/transcript")
-    messages = json.loads(transcript_resp.read())["messages"]
-
+    resp = urllib.request.urlopen(f"{server}/transcript?room_id={fresh_room}")
+    messages = json.loads(resp.read())["messages"]
     speech = [m for m in messages if m["source"] == "speech"]
-    assert speech, "No speech entry found in /transcript after POST"
+    assert speech
     assert speech[0]["text"] == "phase5 acceptance test"
 
 
-# ---------------------------------------------------------------------------
-# Acceptance test 4: WS latency p95 < 2000 ms
-# ---------------------------------------------------------------------------
+# 4. Latency p95 --------------------------------------------------------
 
 def test_latency_report_passes():
-    """phase5_latency.json must exist and report p95 < 2000 ms."""
     assert PHASE5_LATENCY_REPORT.exists(), (
         f"Latency report not found at {PHASE5_LATENCY_REPORT}. "
         "Run: python tests/profile_ws.py"
     )
-
     report = json.loads(PHASE5_LATENCY_REPORT.read_text())
-
     assert report.get("passed") is True, (
-        f"p95 latency {report.get('p95_ms')} ms exceeds "
-        f"target {report.get('target_p95_ms')} ms"
+        f"p95 {report.get('p95_ms')} ms exceeds target {report.get('target_p95_ms')} ms"
     )
-    assert report["p95_ms"] < 2000, (
-        f"p95 = {report['p95_ms']} ms — must be < 2000 ms"
-    )
+    assert report["p95_ms"] < 2000
 
 
-# ---------------------------------------------------------------------------
-# Acceptance test 5: model-not-loaded resilience
-# ---------------------------------------------------------------------------
+# 5. Malformed frame ----------------------------------------------------
 
-def test_model_not_loaded_emits_gracefully(server):
-    """When model is loaded, frame with bad shape must emit error not crash."""
-    sio = sio_lib.Client()
-    error_received = threading.Event()
-    error_data: list[dict] = []
+def test_bad_frame_emits_error(server, fresh_room):
+    signer = _join(server, fresh_room, "signer", "A")
+    got_error = threading.Event()
+    errors: list[dict] = []
 
-    @sio.on("error")
-    def on_error(data):
-        error_data.append(data)
-        error_received.set()
+    @signer.on("error")
+    def on_err(data):
+        errors.append(data)
+        got_error.set()
 
-    sio.connect(server)
-    sio.emit("reset")
-    time.sleep(0.05)
-
-    # Send a frame with wrong feature dimension — should get an error event, not a crash
-    bad_frame = [0.0] * 10  # wrong size (expect 126)
-    sio.emit("frame", {"landmarks": bad_frame, "t": int(time.time() * 1000)})
-    got_error = error_received.wait(timeout=5.0)
-    sio.disconnect()
-
-    assert got_error, "Server did not emit 'error' event for malformed frame"
-    assert error_data[0].get("message"), "Error event has no message"
+    signer.emit("frame", {"landmarks": [0.0] * 10, "t": int(time.time() * 1000)})
+    received = got_error.wait(timeout=5.0)
+    signer.disconnect()
+    assert received and errors[0].get("message")

@@ -1,8 +1,8 @@
 """End-to-end smoke test for the SignLearn backend.
 
-Starts the server, streams one fixture sequence over WebSocket, verifies a
-ready prediction is received, posts a speech entry, and asserts both show up
-in GET /transcript.
+Creates a room, joins as Signer, streams one fixture sequence, verifies a
+ready prediction is received. Joins a second client as Hearing, emits a
+speech caption, then asserts both messages show up in GET /transcript.
 
 Usage:
     python tests/e2e_smoke.py               # starts its own server
@@ -11,8 +11,10 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -43,6 +45,31 @@ def _load_frames() -> list[list[float]]:
     return [frame.tolist() for frame in np.load(files[0])]  # 30 frames
 
 
+def _create_room(url: str) -> str:
+    req = urllib.request.Request(f"{url}/rooms", method="POST")
+    resp = urllib.request.urlopen(req)
+    return json.loads(resp.read())["room_id"]
+
+
+def _connect_and_join(url: str, room_id: str, role: str, name: str) -> sio_lib.Client:
+    sio = sio_lib.Client()
+    joined = threading.Event()
+
+    @sio.on("join_ok")
+    def _on_join_ok(_data):
+        joined.set()
+
+    @sio.on("join_error")
+    def _on_join_error(data):
+        raise AssertionError(f"join_error for {role}: {data}")
+
+    sio.connect(url)
+    sio.emit("join_room", {"room_id": room_id, "role": role, "name": name})
+    if not joined.wait(timeout=5.0):
+        raise AssertionError(f"Timed out joining room as {role}")
+    return sio
+
+
 def run(url: str, start_server: bool) -> None:
     proc = None
     if start_server:
@@ -64,63 +91,54 @@ def run(url: str, start_server: bool) -> None:
 
 
 def _smoke(url: str) -> None:
-    import threading
-    import json
+    room_id = _create_room(url)
+    print(f"Room created: {room_id}")
 
-    sio = sio_lib.Client()
+    # --- Signer streams a window ---
     ready_received = threading.Event()
     predictions: list[dict] = []
 
-    @sio.on("prediction")
+    signer = sio_lib.Client()
+
+    @signer.on("prediction")
     def on_pred(data):
         predictions.append(data)
         if data.get("ready"):
             ready_received.set()
 
-    # --- Step 1: clear any leftover transcript ---
-    req = urllib.request.Request(
-        f"{url}/transcript?confirm=1",
-        method="DELETE",
-    )
-    urllib.request.urlopen(req)
-    print("Transcript cleared.")
+    join_ok = threading.Event()
+    signer.on("join_ok", lambda *_: join_ok.set())
+    signer.connect(url)
+    signer.emit("join_room", {"room_id": room_id, "role": "signer", "name": "A"})
+    if not join_ok.wait(timeout=5):
+        raise AssertionError("Signer failed to join")
 
-    # --- Step 2: connect and stream one window ---
-    sio.connect(url)
-    sio.emit("reset")
+    signer.emit("reset")
     time.sleep(0.05)
 
     frames = _load_frames()
     print(f"Streaming {len(frames)} frames...")
     for frame in frames:
-        sio.emit("frame", {"landmarks": frame, "t": int(time.time() * 1000)})
+        signer.emit("frame", {"landmarks": frame, "t": int(time.time() * 1000)})
         time.sleep(0.005)
 
-    # --- Step 3: wait for a ready prediction ---
     if not ready_received.wait(timeout=10.0):
-        sio.disconnect()
+        signer.disconnect()
         raise AssertionError("Timed out waiting for a ready prediction")
 
     last_pred = [p for p in predictions if p.get("ready")][-1]
-    label = last_pred.get("label")
-    conf = last_pred.get("confidence")
-    print(f"Prediction received: label={label!r}  confidence={conf}")
-    sio.disconnect()
+    print(f"Prediction received: label={last_pred.get('label')!r} confidence={last_pred.get('confidence')}")
+    signer.disconnect()
 
-    # --- Step 4: post a speech entry ---
-    body = json.dumps({"text": "e2e smoke test"}).encode()
-    req = urllib.request.Request(
-        f"{url}/speech-to-text",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    resp = urllib.request.urlopen(req)
-    assert resp.status == 201, f"POST /speech-to-text returned {resp.status}"
-    print("Speech entry posted.")
+    # --- Hearing user emits a speech caption ---
+    hearing = _connect_and_join(url, room_id, "hearing", "B")
+    hearing.emit("speech", {"text": "e2e smoke test"})
+    time.sleep(0.3)
+    hearing.disconnect()
+    print("Speech caption emitted.")
 
-    # --- Step 5: verify transcript endpoint ---
-    transcript_resp = urllib.request.urlopen(f"{url}/transcript")
+    # --- Verify transcript ---
+    transcript_resp = urllib.request.urlopen(f"{url}/transcript?room_id={room_id}")
     transcript = json.loads(transcript_resp.read())["messages"]
 
     speech_entries = [m for m in transcript if m["source"] == "speech"]

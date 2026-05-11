@@ -1,13 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://127.0.0.1:5001";
-
 export interface SpeechEntry {
   id: number;
   text: string;
   ts: number;
 }
 
+/**
+ * Wraps the browser's Web Speech API. The `onResult` callback receives every
+ * finalized utterance; callers typically forward it to `useRoom.emitSpeech`
+ * so the caption is broadcast to the peer.
+ */
 export function useSpeechToText(onResult?: (text: string, ts: number) => void) {
   const [transcript, setTranscript] = useState<SpeechEntry[]>([]);
   const [listening, setListening] = useState(false);
@@ -26,7 +29,6 @@ export function useSpeechToText(onResult?: (text: string, ts: number) => void) {
   const start = useCallback(() => {
     if (!supported || listening) return;
 
-    // Vendor-prefixed fallback for Safari/Chrome
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR: new () => any =
       (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
@@ -42,19 +44,8 @@ export function useSpeechToText(onResult?: (text: string, ts: number) => void) {
           const text = e.results[i][0].transcript.trim();
           if (text) {
             const ts = Date.now();
-            setTranscript((prev) => [
-              ...prev,
-              { id: ++idRef.current, text, ts },
-            ]);
+            setTranscript((prev) => [...prev, { id: ++idRef.current, text, ts }]);
             onResultRef.current?.(text, ts);
-            // Persist to backend (fire-and-forget)
-            fetch(`${BACKEND_URL}/speech-to-text`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text }),
-            }).catch((err) => {
-              console.warn("[useSpeechToText] Failed to persist speech entry:", err);
-            });
           }
         }
       }

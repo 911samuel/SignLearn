@@ -57,7 +57,22 @@ def main() -> None:
     def on_error(data):
         print(f"  ERROR: {data['message']}", file=sys.stderr)
 
+    # Create a room and join as Signer — frame events are only accepted from Signers.
+    import json
+    import threading
+    import urllib.request
+    room_req = urllib.request.Request(f"{args.url}/rooms", method="POST")
+    room_id = json.loads(urllib.request.urlopen(room_req).read())["room_id"]
+    print(f"Joining room {room_id} as Signer...")
+    joined = threading.Event()
+    sio.on("join_ok", lambda *_: joined.set())
+
     sio.connect(args.url)
+    sio.emit("join_room", {"room_id": room_id, "role": "signer", "name": "ws_smoke"})
+    if not joined.wait(timeout=5.0):
+        print("Failed to join room.", file=sys.stderr)
+        sys.exit(1)
+
     sio.emit("reset")
     time.sleep(0.05)
 

@@ -1,4 +1,4 @@
-"""Subtask 3: WebSocket frame/prediction flow tests."""
+"""WebSocket frame/prediction flow tests (room-scoped)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,17 @@ import pytest
 from backend.api.app import create_app
 from backend.api.model_loader import load_model
 from backend.api.config import CONFIG
+from backend.api.rooms import STORE
 
 FIXTURE_DIR = Path("tests/fixtures/processed_mini/train")
+
+
+def _join_as_signer(client) -> str:
+    room = STORE.create()
+    client.emit("join_room", {"room_id": room.id, "role": "signer", "name": "tester"})
+    # Drain join_ok + room_state events.
+    client.get_received()
+    return room.id
 
 
 @pytest.fixture(scope="module")
@@ -20,16 +29,15 @@ def client():
     app, socketio = create_app()
     app.config["TESTING"] = True
     test_client = socketio.test_client(app)
+    _join_as_signer(test_client)
     yield test_client
     test_client.disconnect()
 
 
 def _load_fixture_frames(n: int = CONFIG.sequence_len) -> list[list[float]]:
-    """Return *n* frames from the first fixture file."""
     npy_files = sorted(FIXTURE_DIR.glob("*.npy"))
     assert npy_files, f"No fixture files in {FIXTURE_DIR}"
-    seq = np.load(npy_files[0])             # (30, 126)
-    # Repeat the sequence if more frames than available are requested.
+    seq = np.load(npy_files[0])
     frames = list(seq)
     while len(frames) < n:
         frames += list(seq)
@@ -41,9 +49,8 @@ def test_connect(client):
 
 
 def test_frame_not_ready_before_window_full(client):
-    """First 29 frames should return ready=False."""
     client.emit("reset")
-    client.get_received()  # flush reset_ack
+    client.get_received()
 
     frames = _load_fixture_frames(CONFIG.sequence_len - 1)
     for frame in frames:
@@ -51,16 +58,14 @@ def test_frame_not_ready_before_window_full(client):
 
     events = client.get_received()
     predictions = [e for e in events if e["name"] == "prediction"]
-    assert all(not p["args"][0]["ready"] for p in predictions), (
-        "Expected ready=False while buffer is warming up"
-    )
+    assert predictions, "Expected at least one prediction event"
+    assert all(not p["args"][0]["ready"] for p in predictions)
 
 
 def test_frame_ready_after_window_full(client):
-    """Sending the 30th frame must emit ready=True."""
     from backend.api.model_loader import get_class_names
     if not get_class_names():
-        pytest.skip("No class names available — model + label map mismatch (empty data/processed/)")
+        pytest.skip("No class names available — model + label map mismatch")
 
     client.emit("reset")
     client.get_received()
@@ -74,7 +79,7 @@ def test_frame_ready_after_window_full(client):
         e for e in events
         if e["name"] == "prediction" and e["args"][0]["ready"]
     ]
-    assert len(ready_events) >= 1, "Expected at least one ready=True prediction"
+    assert len(ready_events) >= 1
 
     last = ready_events[-1]["args"][0]
     if last["label"] is not None:
@@ -83,7 +88,6 @@ def test_frame_ready_after_window_full(client):
 
 
 def test_reset_clears_buffer(client):
-    """After reset the next 29 frames should again be ready=False."""
     client.emit("reset")
     client.get_received()
 
@@ -97,7 +101,18 @@ def test_reset_clears_buffer(client):
 
 
 def test_bad_frame_emits_error(client):
-    client.emit("frame", {"landmarks": [0.0] * 10, "t": 0})  # wrong length
+    client.emit("frame", {"landmarks": [0.0] * 10, "t": 0})
     events = client.get_received()
     errors = [e for e in events if e["name"] == "error"]
-    assert errors, "Expected an 'error' event for malformed landmarks"
+    assert errors
+
+
+def test_frame_rejected_without_room(client):
+    """A connection with no room membership should not receive predictions."""
+    app, socketio = create_app()
+    app.config["TESTING"] = True
+    standalone = socketio.test_client(app)
+    standalone.emit("frame", {"landmarks": [0.0] * CONFIG.feature_dim, "t": 0})
+    events = standalone.get_received()
+    assert not [e for e in events if e["name"] == "prediction"]
+    standalone.disconnect()
