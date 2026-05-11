@@ -44,6 +44,8 @@ jobs:
           python -m backend.data.validate --processed /tmp/processed_ci
 
       - name: Run tests
+        env:
+          SIGNLEARN_SECRET_KEY: ${{ secrets.SIGNLEARN_SECRET_KEY || 'ci-test-key-' }}${{ github.run_id }}
         run: pytest
 
   frontend:
