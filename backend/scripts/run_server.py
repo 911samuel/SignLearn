@@ -6,6 +6,10 @@ Usage:
 
 from __future__ import annotations
 
+# eventlet monkey-patch must happen before any other network imports.
+import eventlet
+eventlet.monkey_patch()
+
 import sys
 from pathlib import Path
 
