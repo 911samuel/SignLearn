@@ -1,20 +1,27 @@
-"""Phase 2 — Subtask 5: Evaluate the trained LSTM on the held-out test split.
+"""Evaluate a trained SignLearn model on the held-out test split.
 
-Produces:
-  artifacts/reports/metrics.json              — accuracy, precision, recall, F1
-  artifacts/reports/classification_report.txt — per-class breakdown
-  artifacts/reports/confusion_matrix.png      — heatmap
+Two modes:
 
-Usage
------
-python backend/scripts/evaluate_model.py
-python backend/scripts/evaluate_model.py --model artifacts/checkpoints/lstm_best.keras
-python backend/scripts/evaluate_model.py --model artifacts/checkpoints/lstm_final.keras
+1. **Single-run** (legacy / Phase 2):
+   ``python backend/scripts/evaluate_model.py --model artifacts/checkpoints/lstm_best.keras``
+
+   Produces in ``--reports-dir``:
+     - metrics.json
+     - classification_report.txt
+     - confusion_matrix.png
+
+2. **Multi-run comparison** (Phase 6):
+   ``python backend/scripts/evaluate_model.py --runs lstm-v1 bilstm-v1 tx-v1``
+
+   For each run located at ``<artifacts>/runs/<name>/`` it evaluates the
+   ``*_best.keras`` checkpoint and aggregates a side-by-side report at
+   ``artifacts/reports/model_comparison.md``.
 """
 
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -35,6 +42,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from backend.data.dataset import build_dataset
 from backend.model.config import (
+    ARTIFACTS_DIR,
     CHECKPOINTS_DIR,
     PROCESSED_DIR,
     REPORTS_DIR,
@@ -44,7 +52,12 @@ from backend.model.config import (
 from backend.scripts.train_model import _remap_labels
 
 
-def evaluate(model_path: Path, data_dir: Path, reports_dir: Path) -> dict:
+def evaluate(
+    model_path: Path,
+    data_dir: Path,
+    reports_dir: Path,
+    feature_mode: str = "raw",
+) -> dict:
     """Load model, run on test split, write report files, return metrics dict."""
     model = tf.keras.models.load_model(str(model_path))
     print(f"Loaded model: {model_path}")
@@ -52,14 +65,19 @@ def evaluate(model_path: Path, data_dir: Path, reports_dir: Path) -> dict:
     cmap  = compact_label_map(processed_dir=data_dir)
     names = compact_class_names(processed_dir=data_dir)
 
-    test_ds = build_dataset("test", batch_size=64, augment=False, processed_dir=data_dir)
+    test_ds = build_dataset(
+        "test", batch_size=64, augment=False,
+        processed_dir=data_dir, feature_mode=feature_mode,
+    )
     test_ds = _remap_labels(test_ds, cmap)
 
     y_true, y_pred = [], []
+    t0 = time.time()
     for seqs, labels in test_ds:
         preds = model.predict(seqs, verbose=0)
         y_true.extend(labels.numpy().tolist())
         y_pred.extend(np.argmax(preds, axis=1).tolist())
+    inference_seconds = time.time() - t0
 
     y_true = np.array(y_true)
     y_pred = np.array(y_pred)
@@ -83,6 +101,10 @@ def evaluate(model_path: Path, data_dir: Path, reports_dir: Path) -> dict:
         "precision_macro": round(precision, 4),
         "recall_macro": round(recall, 4),
         "f1_macro": round(f1, 4),
+        "inference_seconds_total": round(inference_seconds, 3),
+        "inference_seconds_per_sample": round(inference_seconds / max(1, len(y_true)), 5),
+        "param_count": int(model.count_params()),
+        "feature_mode": feature_mode,
     }
 
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -122,29 +144,147 @@ def evaluate(model_path: Path, data_dir: Path, reports_dir: Path) -> dict:
     return metrics
 
 
+# ---------------------------------------------------------------------------
+# Phase 6 — multi-run comparison
+# ---------------------------------------------------------------------------
+
+def _load_run_meta(run_dir: Path) -> dict:
+    cfg = run_dir / "reports" / "config.json"
+    if not cfg.exists():
+        return {}
+    return json.loads(cfg.read_text())
+
+
+def _pick_checkpoint(run_dir: Path, meta: dict) -> Path:
+    """Prefer the explicit best-checkpoint recorded in config.json, else search."""
+    if meta.get("best_checkpoint") and Path(meta["best_checkpoint"]).exists():
+        return Path(meta["best_checkpoint"])
+    # Fallback: glob the run's checkpoints dir.
+    ck_dir = run_dir / "checkpoints"
+    bests = sorted(ck_dir.glob("*_best.keras"))
+    if bests:
+        return bests[0]
+    finals = sorted(ck_dir.glob("*_final.keras"))
+    if finals:
+        return finals[0]
+    raise FileNotFoundError(f"No checkpoints found under {ck_dir}")
+
+
+def compare_runs(
+    run_names: list[str],
+    runs_root: Path,
+    data_dir: Path,
+    out_path: Path,
+) -> dict:
+    """Evaluate each run and write a side-by-side comparison report."""
+    rows = []
+    for name in run_names:
+        run_dir = runs_root / name
+        if not run_dir.exists():
+            print(f"[skip] {name}: directory not found ({run_dir})", file=sys.stderr)
+            continue
+        meta = _load_run_meta(run_dir)
+        try:
+            ckpt = _pick_checkpoint(run_dir, meta)
+        except FileNotFoundError as e:
+            print(f"[skip] {name}: {e}", file=sys.stderr)
+            continue
+        feat = meta.get("feature_mode", "raw")
+        reports = run_dir / "reports"
+        metrics = evaluate(ckpt, data_dir=data_dir, reports_dir=reports, feature_mode=feat)
+        rows.append({
+            "run":          name,
+            "arch":         meta.get("arch_name", "?"),
+            "feature_mode": feat,
+            "params":       metrics["param_count"],
+            "epochs_run":   meta.get("epochs_run"),
+            "train_sec":    meta.get("elapsed_seconds"),
+            "accuracy":     metrics["accuracy"],
+            "f1_macro":     metrics["f1_macro"],
+            "precision":    metrics["precision_macro"],
+            "recall":       metrics["recall_macro"],
+            "best_val_acc": meta.get("best_val_acc"),
+            "ms_per_sample": round(metrics["inference_seconds_per_sample"] * 1000, 3),
+        })
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["# SignLearn — Model Comparison", "",
+             "| Run | Arch | Features | Params | Epochs | Train (s) | Best val | Test acc | F1 | Prec | Rec | ms/sample |",
+             "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for r in rows:
+        lines.append(
+            f"| `{r['run']}` | {r['arch']} | {r['feature_mode']} | "
+            f"{r['params']:,} | {r['epochs_run']} | {r['train_sec']} | "
+            f"{(r['best_val_acc'] or 0):.4f} | **{r['accuracy']:.4f}** | "
+            f"{r['f1_macro']:.4f} | {r['precision']:.4f} | {r['recall']:.4f} | "
+            f"{r['ms_per_sample']} |"
+        )
+
+    if rows:
+        best = max(rows, key=lambda r: r["accuracy"])
+        lines += ["", f"**Top run:** `{best['run']}` — "
+                  f"test accuracy **{best['accuracy']:.1%}**, "
+                  f"F1 {best['f1_macro']:.1%}, "
+                  f"{best['ms_per_sample']} ms/sample."]
+        passes = [r for r in rows if r["accuracy"] >= 0.85]
+        if passes:
+            lines.append(f"\n✅ {len(passes)} run(s) meet the 85% Phase 2 target.")
+        else:
+            lines.append("\n⚠️ No run met the 85% Phase 2 target.")
+    else:
+        lines.append("\nNo runs evaluated.")
+
+    out_path.write_text("\n".join(lines))
+    print(f"\nComparison report → {out_path}")
+    return {"rows": rows, "report_path": str(out_path)}
+
+
 def _parse_args(argv=None):
-    p = argparse.ArgumentParser(description="Evaluate SignLearn LSTM on test split")
-    p.add_argument(
-        "--model",
-        type=Path,
-        default=CHECKPOINTS_DIR / "lstm_best.keras",
-        help="Path to saved model (.h5 or .keras)",
-    )
-    p.add_argument("--data-dir",    type=Path, default=PROCESSED_DIR)
+    p = argparse.ArgumentParser(description="Evaluate SignLearn models on the test split")
+    p.add_argument("--model", type=Path,
+                   default=CHECKPOINTS_DIR / "lstm_best.keras",
+                   help="Path to saved model (.h5 or .keras) — single-run mode")
+    p.add_argument("--runs", nargs="+", default=None,
+                   help="Run names to compare (under <artifacts>/runs/<name>)")
+    p.add_argument("--feature-mode", type=str, default="raw",
+                   choices=["raw", "raw+velocity", "raw+velocity+angles"],
+                   help="Feature mode for single-run evaluation (multi-run reads each run's config.json)")
+    p.add_argument("--runs-root", type=Path, default=ARTIFACTS_DIR / "runs")
+    p.add_argument("--data-dir", type=Path, default=PROCESSED_DIR)
     p.add_argument("--reports-dir", type=Path, default=REPORTS_DIR)
-    p.add_argument(
-        "--min-accuracy",
-        type=float,
-        default=0.85,
-        help="Phase 2 target accuracy. Exit non-zero if test accuracy is below this. "
-             "Set to 0 to disable the gate.",
-    )
+    p.add_argument("--comparison-out", type=Path,
+                   default=REPORTS_DIR / "model_comparison.md")
+    p.add_argument("--min-accuracy", type=float, default=0.85,
+                   help="Target accuracy. Single-run mode exits non-zero if below this. "
+                        "Set to 0 to disable the gate.")
     return p.parse_args(argv)
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    metrics = evaluate(args.model, data_dir=args.data_dir, reports_dir=args.reports_dir)
+
+    if args.runs:
+        result = compare_runs(
+            args.runs,
+            runs_root=args.runs_root,
+            data_dir=args.data_dir,
+            out_path=args.comparison_out,
+        )
+        if args.min_accuracy > 0:
+            best = max((r["accuracy"] for r in result["rows"]), default=0.0)
+            if best < args.min_accuracy:
+                print(f"\n[FAIL] Best test accuracy {best:.1%} below "
+                      f"{args.min_accuracy:.1%}.", file=sys.stderr)
+                sys.exit(1)
+            print(f"\n[PASS] Best run meets the {args.min_accuracy:.1%} target.")
+        sys.exit(0)
+
+    metrics = evaluate(
+        args.model,
+        data_dir=args.data_dir,
+        reports_dir=args.reports_dir,
+        feature_mode=args.feature_mode,
+    )
     print(f"\nSummary: acc={metrics['accuracy']:.1%}  "
           f"F1={metrics['f1_macro']:.1%}  "
           f"precision={metrics['precision_macro']:.1%}  "
@@ -157,4 +297,4 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
         sys.exit(1)
-    print(f"\n[PASS] Test accuracy meets Phase 2 target (>= {args.min_accuracy:.1%}).")
+    print(f"\n[PASS] Test accuracy meets target (>= {args.min_accuracy:.1%}).")

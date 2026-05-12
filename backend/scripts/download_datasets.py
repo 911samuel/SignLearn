@@ -3,7 +3,16 @@ Download raw datasets from Kaggle to data/raw/.
 
 Requirements:
   pip install kaggle
-  Place ~/.kaggle/kaggle.json (from kaggle.com → Account → API → Create Token)
+
+Authentication (kaggle CLI ≥ 2.x uses OAuth):
+  Option A — API token (recommended):
+    1. Go to kaggle.com → Settings → Account → API → "Create New API Token"
+    2. Save the downloaded kaggle.json to ~/.kaggle/kaggle.json
+    3. chmod 600 ~/.kaggle/kaggle.json
+
+  Option B — OAuth (browser-based):
+    Run:  kaggle auth login
+    This opens a browser; no file needed.
 
 Usage:
   python backend/scripts/download_datasets.py               # downloads all
@@ -37,12 +46,20 @@ DATASETS = {
 }
 
 
-def _kaggle_available() -> bool:
-    try:
-        import kaggle  # noqa: F401
-        return True
-    except ImportError:
-        return False
+def _check_kaggle_auth() -> bool:
+    """Return True if kaggle CLI can authenticate (json token or OAuth session)."""
+    import shutil
+    # Try standalone kaggle CLI first (OAuth credentials.json), then python -m kaggle
+    cmd_options = []
+    kaggle_bin = shutil.which("kaggle")
+    if kaggle_bin:
+        cmd_options.append([kaggle_bin, "datasets", "list", "--max-size", "1"])
+    cmd_options.append([sys.executable, "-m", "kaggle", "datasets", "list", "--max-size", "1"])
+    for cmd in cmd_options:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            return True
+    return False
 
 
 def download(name: str, info: dict) -> None:
@@ -53,9 +70,12 @@ def download(name: str, info: dict) -> None:
 
     dest.mkdir(parents=True, exist_ok=True)
     print(f"[{name}] Downloading {info['slug']} → {dest} ...")
+    import shutil as _shutil
+    kaggle_bin = _shutil.which("kaggle") or sys.executable
+    cmd = ([kaggle_bin, "datasets", "download"] if _shutil.which("kaggle")
+           else [sys.executable, "-m", "kaggle", "datasets", "download"])
     subprocess.run(
-        [sys.executable, "-m", "kaggle", "datasets", "download",
-         "-d", info["slug"], "-p", str(dest), "--unzip"],
+        cmd + ["-d", info["slug"], "-p", str(dest), "--unzip"],
         check=True,
     )
 
@@ -68,14 +88,16 @@ def download(name: str, info: dict) -> None:
 
 
 def main() -> None:
-    if not _kaggle_available():
-        print("kaggle package not found. Run: pip install kaggle")
-        sys.exit(1)
-
-    kaggle_json = Path.home() / ".kaggle" / "kaggle.json"
-    if not kaggle_json.exists():
-        print(f"Kaggle credentials missing: {kaggle_json}")
-        print("Get your token from kaggle.com → Account → API → Create New Token")
+    if not _check_kaggle_auth():
+        print(
+            "\nKaggle authentication required. Choose one option:\n\n"
+            "  Option A (API token — recommended):\n"
+            "    1. Go to kaggle.com → Settings → Account → API → 'Create New API Token'\n"
+            "    2. mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json\n"
+            "    3. chmod 600 ~/.kaggle/kaggle.json\n\n"
+            "  Option B (OAuth browser login):\n"
+            "    kaggle auth login\n"
+        )
         sys.exit(1)
 
     parser = argparse.ArgumentParser(description="Download SignLearn datasets from Kaggle.")

@@ -60,15 +60,31 @@ def _default_num_classes() -> int:
 
 @dataclass
 class TrainConfig:
-    """Hyperparameters for the Phase 2 LSTM."""
+    """Hyperparameters for the SignLearn sequence classifier.
+
+    ``arch_name`` selects which architecture builder to use from
+    :data:`backend.model.architectures.ARCHITECTURE_REGISTRY`. ``feature_mode``
+    controls the engineered-feature stack in :mod:`backend.data.features`; when
+    not ``"raw"`` the model input width grows accordingly via
+    :func:`backend.data.features.output_dim`.
+    """
 
     input_shape: tuple[int, int] = (SEQUENCE_LEN, FEATURE_DIM)
     num_classes: int = field(default_factory=_default_num_classes)
+
+    arch_name: str = "lstm"
+    feature_mode: str = "raw"
 
     lstm_units: tuple[int, int] = (128, 64)
     dense_units: int = 64
     dropout: float = 0.4
     recurrent_dropout: float = 0.2
+
+    # Transformer-specific knobs (ignored by LSTM/BiLSTM builders).
+    transformer_layers: int = 2
+    transformer_heads: int = 4
+    transformer_d_model: int = 128
+    transformer_ff_dim: int = 256
 
     learning_rate: float = 1e-3
     batch_size: int = 32

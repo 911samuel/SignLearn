@@ -4,10 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SignLearn is a real-time American Sign Language (ASL) recognition system. It uses MediaPipe Hands for landmark extraction and a stacked LSTM model for sequence classification across 93 vocabulary classes (26 letters, 10 digits, 24 static words, 33 dynamic words). See `docs/vocabulary.md` for the full list.
+SignLearn is a real-time American Sign Language (ASL) recognition system. MediaPipe Hands extracts landmarks in-browser; a sequence classifier on the backend predicts signs and logs a transcript for hearing users.
 
-**Member A** (this context): ML/AI Lead — data pipeline, model design, training, MediaPipe extraction.  
-**Member B**: Full-Stack + Frontend Lead — Flask backend, WebSocket, React UI, speech-to-text.
+**Member A** (ML/AI Lead): data pipeline, model training, MediaPipe extraction — branch `feature/model-training`.  
+**Member B** (Full-Stack + Frontend Lead): Flask backend, WebSocket, React UI, speech-to-text — branch `dev-web`.
+
+Vocabulary: 93 classes — `a`–`z` (26), `0`–`9` (10), 24 static words, 33 dynamic words (snake_case). Full list: `docs/vocabulary.md`.  
+Currently trained on **digits only** (10 classes, 1724 sequences). Remaining 83 classes need recorded data — see `artifacts/reports/data_collection_recommendation.md`.
+
+---
 
 ## Commands
 
@@ -15,141 +20,165 @@ SignLearn is a real-time American Sign Language (ASL) recognition system. It use
 # Install dependencies
 pip install -r requirements.txt
 
-# Download MediaPipe hand landmarker model (required once, stored in models/)
+# Build label map from docs/vocabulary.md (required once)
+python -m backend.data.label_map
+
+# Download MediaPipe hand landmarker (required once, stored in models/)
 curl -L https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task \
      -o models/hand_landmarker.task
 
-# Verify webcam + MediaPipe are working (smoke test, appends result to docs/hardware.md)
-python tests/test_mediapipe.py
-
-# Collect a landmark sequence sample (30 frames → .npy)
-python backend/scripts/extract_landmarks.py --out data/processed/<label>/sample_001.npy --frames 30
-
-# Download ASL datasets from Kaggle (requires ~/.kaggle/kaggle.json)
+# Download Kaggle ASL datasets (requires ~/.kaggle/kaggle.json)
 python backend/scripts/download_datasets.py --dataset alphabet
 python backend/scripts/download_datasets.py --dataset digits
 
-# Verify raw dataset image integrity
-python backend/scripts/data_verification.py data/raw/digits
+# Record a landmark sequence from webcam (30 frames → .npy)
+python backend/scripts/extract_landmarks.py --out data/processed/train/<label>/<label>_s01_0000.npy
 
-# Run all tests
-pytest
+# Audit dataset quality
+python backend/scripts/audit_dataset.py
 
-# Run a specific test file verbosely
-pytest tests/test_pipeline.py -v
+# Train a model (outputs to artifacts/runs/<run-name>/)
+python backend/scripts/train_model.py --arch transformer --run-name tx-v1 --epochs 80
+python backend/scripts/train_model.py --arch bilstm     --run-name bilstm-v1
+python backend/scripts/train_model.py --arch lstm                            # legacy default
+
+# Compare multiple trained runs
+python backend/scripts/evaluate_model.py --runs lstm-v1 bilstm-v1 tx-v1
+
+# Evaluate a single checkpoint
+python backend/scripts/evaluate_model.py --model artifacts/runs/tx-v1/checkpoints/transformer_best.keras
+
+# Profile inference latency
+python backend/scripts/profile_inference.py --model artifacts/runs/tx-v1/checkpoints/transformer_best.keras
+
+# Run all tests (requires env vars)
+SIGNLEARN_ASYNC_MODE=threading SIGNLEARN_SECRET_KEY=test-secret pytest
+
+# Run a single test file
+SIGNLEARN_ASYNC_MODE=threading SIGNLEARN_SECRET_KEY=test-secret pytest tests/test_augment.py -v
+
+# Start the backend server (http://127.0.0.1:5001)
+python backend/scripts/run_server.py
+
+# Start the frontend dev server (http://localhost:5173)
+cd frontend && npm install && npm run dev
 ```
 
-Notes:
-- `tests/test_pipeline.py` requires `data/processed/sample.npy` (run `extract_landmarks.py` first).
-- Scripts use the **MediaPipe Tasks API** (`mediapipe.tasks`) — not the legacy `mediapipe.python.solutions` which is unavailable on macOS ARM in mediapipe ≥ 0.10.
-- `models/` is gitignored; `hand_landmarker.task` must be downloaded locally by each developer.
+**Notes:**
+- `SIGNLEARN_ASYNC_MODE=threading` is required by all tests — Flask-SocketIO eventlet mode conflicts with pytest threads.
+- `SIGNLEARN_SECRET_KEY` is required by route/socket tests.
+- `models/hand_landmarker.task` is gitignored; every developer must download it.
+- Scripts use `mediapipe.tasks` (Tasks API) — not the legacy `mediapipe.python.solutions` API (unavailable on macOS ARM in mediapipe ≥ 0.10).
+
+---
 
 ## Architecture
 
-### ML Pipeline
+### End-to-end data flow
 
-**Input → Landmark extraction → Sequence → LSTM → Prediction**
-
-1. Webcam frame → MediaPipe Hands → up to 2 hands × 21 landmarks × 3 coords = 126 floats per frame (63 per hand, both hands concatenated; missing hand zero-padded)
-2. 30 consecutive frames → shape `(30, 126)` float32 array (zero-padded if no hand detected)
-3. Two-layer stacked LSTM (128 → 64 units) with Masking → softmax over 93 classes
-4. Target: ≥85% validation accuracy, <500ms inference latency (p95)
-
-Key decision: **No CNN stage.** MediaPipe replaces spatial feature extraction; LSTM handles temporal modeling. This allows real-time CPU inference at ≥30 FPS.
-
-### Data
-
-- `data/raw/` — static image datasets (ASL Alphabet ~3000 imgs/class, Digits ~100 imgs/class)
-- `data/processed/` — landmark sequences as `.npy` files in shape `(30, 126)`, float32
-- `data/external/` — third-party metadata / WLASL subsets
-- `models/` — MediaPipe model files (gitignored; `.keras` checkpoints tracked via Git LFS in `artifacts/checkpoints/`)
-
-**Training data strategy**: Public datasets are static images and have bias issues. Primary approach is custom self-recorded data via `extract_landmarks.py` targeting 50 samples per class (93 × 50 ≈ 4650 total sequences).
-
-### Vocabulary
-
-93 classes: `a`–`z` (26), `0`–`9` (10), 24 static words, 33 dynamic words (all snake_case). Full list in `docs/vocabulary.md`.
-
-### Backend (Phase 3 — complete)
-
-Flask + Flask-SocketIO server (`threading` async mode). Landmark frames arrive over WebSocket, a 30-frame sliding window triggers LSTM inference, confident predictions are emitted back and logged to SQLite.
-
-**Running the backend:**
-
-```bash
-# Install backend deps (flask, flask-socketio, flask-cors, websocket-client)
-pip install -r requirements.txt
-
-# Start the dev server on http://127.0.0.1:5001
-python backend/scripts/run_server.py
-
-# End-to-end smoke test (starts its own server subprocess)
-python tests/e2e_smoke.py
-
-# WebSocket latency profiler (p95 target < 500 ms)
-python tests/profile_ws.py
 ```
+Browser webcam
+  → MediaPipe Hands (in-browser, frontend/src/hooks/useSignRecognition.ts)
+  → WebSocket "frame" event  {landmarks: [126 floats], t: unix_ms}
+  → backend/api/socket_handlers.py  →  FrameBuffer.push()
+  → backend/api/model_loader.run_inference_probs()
+  → backend/api/smoothing.PredictionSmoother.update()  (EMA + confidence gate)
+  → WebSocket "prediction" event  {label, confidence, ready}
+  → frontend HearingPanel.tsx
+```
+
+### ML pipeline (`backend/`)
+
+**Landmark shape:** 2 hands × 21 landmarks × 3 coords = `(30, 126)` float32 per sequence. Left hand occupies `[:63]`, right hand `[63:]`; absent hand slots are zero-padded. The wrist (index 0) is centred at origin and max inter-landmark distance is unit-scaled per hand (`backend/data/normalize.py`).
+
+**Model architectures** — all three are registered in `backend/model/architectures/__init__.py`:
+
+| Name | File | Notes |
+|---|---|---|
+| `lstm` | `architectures/lstm.py` | Stacked LSTM 128→64, Phase 2 baseline |
+| `bilstm` | `architectures/bilstm.py` | BiLSTM 128→64 |
+| `transformer` | `architectures/transformer.py` | 2-layer encoder, 4 heads, d_model=128; **best performer (98.4% test acc on digits)** |
+
+Select with `--arch` flag; config is persisted to `artifacts/runs/<run-name>/reports/config.json`.
+
+**Feature modes** (`backend/data/features.py`) — set via `TrainConfig.feature_mode`:
+- `raw` (default): plain normalized `(T, 126)`
+- `raw+velocity`: appends per-frame Δ → `(T, 252)`
+- `raw+velocity+angles`: also appends 5 finger joint angles per hand → `(T, 262)`
+
+**Label map:** `artifacts/label_map.json` is the canonical index (0–92). Generated from `docs/vocabulary.md`. Digit directories on disk (`0`–`9`) are aliased to word form (`zero`–`nine`) by `backend/data/label_map.resolve_label`. Training uses a *compact* re-index over only the classes present in `data/processed/train/` — see `compact_label_map()` in `backend/model/config.py`.
+
+**Augmentation** (`backend/data/augment.py`): default `random_augment` uses mild probs (rotate, scale, translate, noise, drop). Pass `probs=TRAINING_PROBS` (exported from the same module) to enable the aggressive training profile that also includes `rotate3d` and `speed_warp`. Horizontal flip defaults to 0 — handedness is linguistically meaningful.
+
+**Artifact layout:**
+```
+artifacts/
+├── checkpoints/          # legacy flat path; lstm_best.keras / lstm_final.keras
+├── runs/<run-name>/
+│   ├── checkpoints/      # <arch>_best.keras, <arch>_final.keras
+│   ├── reports/          # config.json, history.json, metrics.json,
+│   │                     # classification_report.txt, confusion_matrix.png
+│   └── logs/             # TensorBoard
+├── reports/
+│   ├── dataset_audit.md / .json
+│   ├── model_comparison.md
+│   ├── data_collection_recommendation.md
+│   └── inference_profile.md
+└── label_map.json
+```
+
+### Backend API (`backend/api/`)
+
+Flask + Flask-SocketIO in `threading` mode. One `FrameBuffer` per connected signer (keyed by `request.sid`). The buffer normalizes frames, accumulates 30, runs inference, and passes the full softmax vector through `PredictionSmoother` before emitting.
+
+**`PredictionSmoother` knobs** (`backend/api/smoothing.py`):
+- `ema_alpha=0.6` — weight on the newest frame's probabilities
+- `conf_threshold=0.75` — below this, emit `{label: null}`
+- `repeat_cooldown_frames=15` — suppress re-emitting the same label
+- `stride=1` — predict every N frames
+
+The server's default checkpoint path is `artifacts/checkpoints/lstm_best.keras` (`backend/api/config.py`). Swap to the Transformer by symlinking/copying `artifacts/runs/tx-v1/checkpoints/transformer_best.keras` there.
+
+**WebSocket wire format (unchanged):**
+```
+client → server:  emit("frame",  {"landmarks": [126 floats], "t": unix_ms})
+server → client:  emit("prediction", {"label": str|null, "confidence": float|null, "ready": bool})
+client → server:  emit("reset")
+server → client:  emit("reset_ack", {})
+```
+
+Normalization (`normalize_frame`) runs on the backend — frontend sends **raw** landmark values.
 
 **REST endpoints:**
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Server + model status |
-| `POST` | `/speech-to-text` | Log browser STT result `{"text": "..."}` |
-| `GET` | `/transcript?limit=100` | Full session conversation log |
+|---|---|---|
+| `GET` | `/health` | Server + model load status |
+| `POST` | `/speech-to-text` | Log browser STT result `{"text":"..."}` |
+| `GET` | `/transcript?limit=100` | Session conversation log |
 | `DELETE` | `/transcript?confirm=1` | Clear transcript (dev only) |
 
-**WebSocket events (Member B wire format):**
+### Frontend (`frontend/`)
 
-```
-client → server:  emit("frame",  {"landmarks": [126 floats], "t": <unix ms>})
-server → client:  emit("prediction", {"label": str|null, "confidence": float|null, "ready": bool})
-client → server:  emit("reset")          # clear sliding window
-server → client:  emit("reset_ack", {})
-```
+React + Next.js 15 App Router. MediaPipe Hands runs **in-browser** (lower latency than backend extraction). Dual-panel layout: left (signer + webcam overlay), right (hearing user + speech input).
 
-Normalization (`normalize_frame`) runs on the backend — frontend sends raw landmark values.
+Key hooks: `src/hooks/useSignRecognition.ts`, `src/hooks/useSpeechToText.ts`.  
+Key components: `src/components/SignerPanel.tsx`, `src/components/HearingPanel.tsx`.  
+Backend URL: `VITE_BACKEND_URL` (defaults to `http://127.0.0.1:5001`).
 
-### Frontend (Phase 4 — complete)
+---
 
-React + Vite app in `frontend/`. MediaPipe Hands runs **in-browser** (lower latency than backend extraction). Dual-panel layout: left (signer + webcam), right (hearing user + speech input).
+## Key constraints
 
-**Running the frontend:**
+- **No CNN stage.** MediaPipe replaces spatial feature extraction; the sequence model handles temporal modeling. This keeps inference on CPU at ≥30 FPS.
+- **Compact label remapping is mandatory.** Model output has `num_classes` = number of classes *present in the train split*, not 93. `_remap_labels()` in `train_model.py` converts full-vocab indices to compact indices before computing the loss.
+- **Static images lack temporal motion.** Sequences extracted from single images (all frames identical) are valid for static signs only. Dynamic words require real video capture via `extract_landmarks.py`.
+- **`artifacts/` is gitignored** except `.keras` files tracked via Git LFS. Always run `git lfs pull` after checkout if you need checkpoints.
 
-```bash
-cd frontend && npm install
-npm run dev   # http://localhost:5173
-```
-
-Set `VITE_BACKEND_URL=http://127.0.0.1:5001` in `frontend/.env` (defaults to that if unset).
-
-Key files: `src/hooks/useSignRecognition.ts`, `src/hooks/useSpeechToText.ts`, `src/components/SignerPanel.tsx`, `src/components/HearingPanel.tsx`.
-
-## Phases (14-week plan)
-
-| Phase | Weeks | Goal |
-|-------|-------|------|
-| 0 | 1 | Environment setup |
-| 1 | 2–3 | Data pipeline & landmark preprocessing |
-| 2 | 4–6 | LSTM model training & evaluation |
-| 3 | 5–7 | Backend API & WebSocket server |
-| 4 | 6–9 | React frontend |
-| 5 | 10 | Full system integration |
-| 6 | 11–12 | Testing, evaluation, usability |
-| 7 | 13–14 | Documentation & defense prep |
-
-Full plan: `docs/sign_learn.md`
+---
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) runs two jobs on push/PR to `dev-ml`, `dev-web`, and `main`:
-- **test** — Python 3.11, `pytest` (includes LFS checkout for model checkpoint)
-- **frontend** — Node 20, `npm ci && npm run build && npm test`
-
-## Key Docs
-
-- `docs/sign_learn.md` — full 14-week implementation plan
-- `docs/vocabulary.md` — 75-class label list (ML-ready snake_case)
-- `docs/data_gaps.md` — dataset limitations and fallback strategies
-- `docs/hardware.md` — M2 Pro GPU/CPU strategy (tensorflow-metal)
-- `docs/research_notes.md` — MediaPipe + LSTM architecture justification
+GitHub Actions (`.github/workflows/ci.yml`) — triggers on push/PR to `dev-ml`, `dev-web`, `main`:
+- **test**: Python 3.11, `pytest` (LFS checkout included)
+- **frontend**: Node 20, `npm ci && npm run build && npm test`

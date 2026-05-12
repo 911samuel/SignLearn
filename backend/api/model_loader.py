@@ -130,3 +130,19 @@ def run_inference(seq: np.ndarray) -> tuple[str, float]:
             f"(got {len(names)} names). Model and label map are mismatched."
         )
     return names[idx], float(probs[idx])
+
+
+def run_inference_probs(seq: np.ndarray) -> np.ndarray:
+    """Same input contract as :func:`run_inference` but returns the full
+    softmax probability vector instead of ``(label, confidence)``.
+
+    Used by the real-time smoother (Phase 7) which EMAs probabilities across
+    frames before applying confidence / repeat-suppression gates.
+    """
+    expected = (CONFIG.sequence_len, CONFIG.feature_dim)
+    if seq.shape != expected:
+        raise ValueError(f"Expected shape {expected}, got {seq.shape}")
+    model = get_model()
+    with _lock:
+        probs = model.predict(seq[np.newaxis], verbose=0)[0]
+    return np.asarray(probs, dtype=np.float32)
