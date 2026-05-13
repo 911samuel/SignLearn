@@ -58,7 +58,8 @@ def _compute_class_weights(processed_dir: Path, cmap: dict[int, int]) -> dict[in
     weights = {}
     for full_idx, compact_idx in cmap.items():
         c = counts.get(full_idx, 1)
-        weights[compact_idx] = n_total / (n_classes * max(c, 1))
+        w = n_total / (n_classes * max(c, 1))
+        weights[compact_idx] = min(w, 5.0)  # cap at 5× to avoid gradient instability
     return weights
 
 
