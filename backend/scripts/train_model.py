@@ -43,6 +43,25 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 _log = logging.getLogger(__name__)
 
 
+def _compute_class_weights(processed_dir: Path, cmap: dict[int, int]) -> dict[int, float]:
+    """Return inverse-frequency class weights keyed by compact label index."""
+    import numpy as np
+    from backend.data.dataset import list_split
+    counts: dict[int, int] = {}
+    for full_idx in cmap:
+        counts[full_idx] = 0
+    for _, label_idx in list_split("train", processed_dir=processed_dir):
+        if label_idx in counts:
+            counts[label_idx] += 1
+    n_total = sum(counts.values())
+    n_classes = len(counts)
+    weights = {}
+    for full_idx, compact_idx in cmap.items():
+        c = counts.get(full_idx, 1)
+        weights[compact_idx] = n_total / (n_classes * max(c, 1))
+    return weights
+
+
 def _remap_labels(ds: tf.data.Dataset, cmap: dict[int, int]) -> tf.data.Dataset:
     """Remap full-vocab label indices to compact 0..N-1 indices.
 
@@ -166,12 +185,18 @@ def train(
         ),
     ]
 
+    class_weights = _compute_class_weights(data_dir, cmap)
+    max_w = max(class_weights.values())
+    _log.info("Class weights: min=%.2f  max=%.2f  ratio=%.1f:1",
+              min(class_weights.values()), max_w, max_w / min(class_weights.values()))
+
     t0 = time.time()
     history = model.fit(
         train_ds,
         validation_data=val_ds,
         epochs=config.epochs,
         callbacks=callbacks,
+        class_weight=class_weights,
         verbose=1,
     )
     elapsed = time.time() - t0
