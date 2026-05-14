@@ -117,6 +117,15 @@ def build_dataset(
 
     dataset = dataset.map(_load_and_normalize, num_parallel_calls=tf.data.AUTOTUNE)
 
+    # Cache loaded+normalized sequences in memory so subsequent epochs avoid
+    # disk I/O and Python overhead.  For train with augmentation the cache sits
+    # *before* augmentation so each epoch still receives fresh random transforms.
+    # Skip caching when augmentation is off and the split is train (not needed)
+    # but always cache val/test since those datasets never change.
+    _should_cache = (split != "train") or augment
+    if _should_cache:
+        dataset = dataset.cache()
+
     if augment:
         _rng = np.random.default_rng()
 
