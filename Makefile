@@ -41,6 +41,7 @@ label-map:
 audit:
 	$(PYTHON) backend/scripts/audit_dataset.py
 
+TARGET ?= 600
 ## Augment minority classes to TARGET samples: make augment TARGET=600
 augment:
 	$(PYTHON) backend/scripts/augment_minority.py --target-count $(TARGET)

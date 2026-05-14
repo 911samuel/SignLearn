@@ -92,6 +92,34 @@ def evaluate(
     except ValueError:
         rel_model = str(model_path)
 
+    # Per-class precision/recall/f1 for easy programmatic access
+    from sklearn.metrics import precision_recall_fscore_support
+    per_class_p, per_class_r, per_class_f, per_class_support = (
+        precision_recall_fscore_support(y_true, y_pred, labels=list(range(len(names))), zero_division=0)
+    )
+    per_class_metrics = {
+        names[i]: {
+            "precision": round(float(per_class_p[i]), 4),
+            "recall":    round(float(per_class_r[i]), 4),
+            "f1":        round(float(per_class_f[i]), 4),
+            "support":   int(per_class_support[i]),
+        }
+        for i in range(len(names))
+    }
+
+    # Top confusion pairs (true_label, predicted_label, count)
+    import numpy as np
+    cm_tmp = confusion_matrix(y_true, y_pred, labels=list(range(len(names))))
+    np.fill_diagonal(cm_tmp, 0)
+    top_confusion_pairs = []
+    while len(top_confusion_pairs) < 20:
+        i, j = np.unravel_index(np.argmax(cm_tmp), cm_tmp.shape)
+        cnt = int(cm_tmp[i, j])
+        if cnt == 0:
+            break
+        top_confusion_pairs.append({"true": names[i], "predicted": names[j], "count": cnt})
+        cm_tmp[i, j] = 0
+
     metrics = {
         "model": rel_model,
         "test_samples": int(len(y_true)),
@@ -105,6 +133,8 @@ def evaluate(
         "inference_seconds_per_sample": round(inference_seconds / max(1, len(y_true)), 5),
         "param_count": int(model.count_params()),
         "feature_mode": feature_mode,
+        "per_class": per_class_metrics,
+        "top_confusion_pairs": top_confusion_pairs,
     }
 
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -231,6 +261,29 @@ def compare_runs(
             lines.append(f"\n✅ {len(passes)} run(s) meet the 85% Phase 2 target.")
         else:
             lines.append("\n⚠️ No run met the 85% Phase 2 target.")
+
+        # Top confusion pairs from the best run's metrics
+        best_metrics_path = runs_root / best["run"] / "reports" / "metrics.json"
+        if best_metrics_path.exists():
+            import json as _json
+            bm = _json.load(open(best_metrics_path))
+            pairs = bm.get("top_confusion_pairs", [])
+            if pairs:
+                lines += ["", f"### Top confusion pairs (best run: `{best['run']}`)", "",
+                          "| True | → Predicted | Count |", "|---|---|---:|"]
+                for p in pairs[:10]:
+                    lines.append(f"| `{p['true']}` | `{p['predicted']}` | {p['count']} |")
+
+        # Per-class failures (F1 < 0.5) from best run
+        if "per_class" in bm:
+            low_f1 = [(cls, d["f1"], d["support"])
+                      for cls, d in bm["per_class"].items() if d["f1"] < 0.5]
+            if low_f1:
+                low_f1.sort(key=lambda x: x[1])
+                lines += ["", "### Classes with F1 < 0.50 (best run)", "",
+                          "| Class | F1 | Support |", "|---|---:|---:|"]
+                for cls, f1, sup in low_f1:
+                    lines.append(f"| `{cls}` | {f1:.3f} | {sup} |")
     else:
         lines.append("\nNo runs evaluated.")
 
@@ -247,7 +300,8 @@ def _parse_args(argv=None):
     p.add_argument("--runs", nargs="+", default=None,
                    help="Run names to compare (under <artifacts>/runs/<name>)")
     p.add_argument("--feature-mode", type=str, default="raw",
-                   choices=["raw", "raw+velocity", "raw+velocity+angles"],
+                   choices=["raw", "raw+velocity", "raw+velocity+angles",
+                            "raw+velocity+acceleration", "engineered"],
                    help="Feature mode for single-run evaluation (multi-run reads each run's config.json)")
     p.add_argument("--runs-root", type=Path, default=ARTIFACTS_DIR / "runs")
     p.add_argument("--data-dir", type=Path, default=PROCESSED_DIR)

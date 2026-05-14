@@ -1,0 +1,14 @@
+# Smoke sweep — raw features, 4 archs, 25 epochs.
+# Run this to quickly identify the best architecture before the full sweep.
+# Expected runtime: ~2 hours on CPU (4 runs × ~30 min each).
+
+sweep_id: phase3-raw-smoke
+
+epochs: 25
+batch_size: 32
+
+grid:
+  arch:         [bilstm, tcn, cnn_bilstm, conformer_lite]
+  feature_mode: [raw]
+  learning_rate: [1.0e-3]
+  dropout:       [0.4]
