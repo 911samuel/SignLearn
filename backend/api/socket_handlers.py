@@ -35,9 +35,27 @@ from backend.api.rooms import STORE
 # One FrameBuffer per connected Signer, keyed by session ID.
 _buffers: dict[str, FrameBuffer] = {}
 
+# Last-active timestamp per session for idle TTL eviction.
+_last_active: dict[str, float] = {}
+_IDLE_TTL_SECS = 300.0  # evict FrameBuffers idle for 5 min (belt-and-suspenders)
+
 # Debounce state: last (label, timestamp) written to DB per connection.
 _last_written: dict[str, tuple[str, float]] = {}
 _DEBOUNCE_SECS = 1.0
+
+
+def _evict_idle_buffers() -> None:
+    """Remove FrameBuffers that haven't received a frame for _IDLE_TTL_SECS.
+
+    Called on every incoming frame to amortize the cost.  Without this,
+    clients that close the tab without a clean WS close would leak memory.
+    """
+    now = time.monotonic()
+    stale = [sid for sid, ts in _last_active.items() if (now - ts) > _IDLE_TTL_SECS]
+    for sid in stale:
+        _buffers.pop(sid, None)
+        _last_active.pop(sid, None)
+        _last_written.pop(sid, None)
 
 
 def _maybe_log(sid: str, room_id: str, label: str, confidence: float) -> None:
@@ -69,6 +87,7 @@ def register(socketio: SocketIO) -> None:
         sid = request.sid
         _buffers.pop(sid, None)
         _last_written.pop(sid, None)
+        _last_active.pop(sid, None)
         room = STORE.remove_member(sid)
         if room is not None:
             _broadcast_room_state(socketio, room.id)
@@ -132,6 +151,10 @@ def register(socketio: SocketIO) -> None:
         buf = _buffers.get(sid)
         if buf is None:
             buf = _buffers[sid] = FrameBuffer()
+
+        # Update last-active and opportunistically evict idle sessions.
+        _last_active[sid] = time.monotonic()
+        _evict_idle_buffers()
 
         try:
             result = buf.push(data["landmarks"])
