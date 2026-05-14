@@ -130,6 +130,67 @@ def _overlay(frame: np.ndarray, label: str, sample_idx: int, target: int,
                     cv2.FONT_HERSHEY_SIMPLEX, 1.5, _GREEN, 3)
 
 
+_ANGLE_CHOICES    = ("front", "30L", "30R")
+_LIGHTING_CHOICES = ("bright", "dim")
+
+
+def _write_diversity_sidecar(
+    npy_path: Path,
+    angle: str,
+    lighting: str,
+    signer: int,
+    label: str,
+) -> None:
+    """Write a JSON sidecar next to the .npy file with diversity metadata."""
+    import json
+    meta = {
+        "label": label,
+        "signer": signer,
+        "angle": angle,
+        "lighting": lighting,
+        "npy": npy_path.name,
+    }
+    sidecar = npy_path.with_suffix(".json")
+    sidecar.write_text(json.dumps(meta, indent=2))
+
+
+def _prompt_diversity(label: str, sample_idx: int) -> tuple[str, str]:
+    """Console prompt for angle + lighting metadata before a take."""
+    print(f"\n  [diversity] Take #{sample_idx + 1} for '{label}'")
+    print(f"  Angle   : {' / '.join(f'{i}={c}' for i,c in enumerate(_ANGLE_CHOICES))}")
+    a_raw = input("  Choose angle [0]: ").strip() or "0"
+    try:
+        angle = _ANGLE_CHOICES[int(a_raw)]
+    except (ValueError, IndexError):
+        angle = _ANGLE_CHOICES[0]
+
+    print(f"  Lighting: {' / '.join(f'{i}={c}' for i,c in enumerate(_LIGHTING_CHOICES))}")
+    l_raw = input("  Choose lighting [0]: ").strip() or "0"
+    try:
+        lighting = _LIGHTING_CHOICES[int(l_raw)]
+    except (ValueError, IndexError):
+        lighting = _LIGHTING_CHOICES[0]
+
+    print(f"  → angle={angle}  lighting={lighting}")
+    return angle, lighting
+
+
+def _diversity_summary(split_dir: Path, label: str) -> dict:
+    """Return a dict counting angle × lighting combos recorded so far."""
+    import json
+    counts: dict[str, dict[str, int]] = {}
+    for jf in split_dir.glob(f"{label}_s*.json"):
+        try:
+            meta = json.loads(jf.read_text())
+            a = meta.get("angle", "?")
+            l = meta.get("lighting", "?")
+            counts.setdefault(a, {}).setdefault(l, 0)
+            counts[a][l] += 1
+        except Exception:  # noqa: BLE001
+            pass
+    return counts
+
+
 def _count_existing(out_dir: Path, label: str) -> int:
     return len(list(out_dir.glob(f"{label}_s*.npy")))
 
@@ -157,6 +218,7 @@ def record_session(
     signer: int,
     target: int,
     countdown_secs: int = 3,
+    diversity_matrix: bool = False,
 ) -> dict[str, int]:
     """Run the interactive recording session. Returns {word: n_recorded}."""
     split = _SIGNER_SPLIT.get(signer, "train")
@@ -188,8 +250,10 @@ def record_session(
     print(f"\nSignLearn Vocabulary Recorder")
     print(f"  Signer: {signer} → split: {split}")
     print(f"  Target: {target} samples per word")
-    print(f"  Words:  {', '.join(words)}\n")
-    print("Controls: SPACE=record  S=skip word  R=redo last  Q=quit\n")
+    print(f"  Words:  {', '.join(words)}")
+    if diversity_matrix:
+        print(f"  Mode:   diversity-matrix (angle × lighting metadata per take)")
+    print("\nControls: SPACE=record  S=skip word  R=redo last  Q=quit\n")
 
     with HandLandmarker.create_from_options(options) as landmarker:
         start_ms = int(time.time() * 1000)
@@ -212,6 +276,17 @@ def record_session(
             last_saved_path: Path | None = None
             countdown_start: float | None = None
             countdown_val = countdown_secs
+            _pending_angle: str = _ANGLE_CHOICES[0]
+            _pending_lighting: str = _LIGHTING_CHOICES[0]
+
+            if diversity_matrix:
+                # Show existing coverage before starting the word
+                coverage = _diversity_summary(split_dir, label)
+                if coverage:
+                    print(f"  Current coverage for '{label}':")
+                    for angle, lmap in sorted(coverage.items()):
+                        for light, cnt in sorted(lmap.items()):
+                            print(f"    angle={angle}, lighting={light}: {cnt} takes")
 
             while True:
                 ret, frame = cap.read()
@@ -255,6 +330,11 @@ def record_session(
                         out_path = split_dir / f"{stem}.npy"
                         np.save(str(out_path), seq)
                         last_saved_path = out_path
+                        if diversity_matrix:
+                            _write_diversity_sidecar(
+                                out_path, _pending_angle, _pending_lighting,
+                                signer, label,
+                            )
                         collected += 1
                         print(f" saved ({collected}/{target})")
                         state = "saved"
@@ -283,6 +363,12 @@ def record_session(
                     return stats
 
                 elif key == ord(" ") and state == "ready":
+                    if diversity_matrix:
+                        # Pause video loop to collect metadata from console
+                        cv2.destroyAllWindows()
+                        _pending_angle, _pending_lighting = _prompt_diversity(label, collected)
+                        # Reopen window
+                        cv2.namedWindow("SignLearn — Vocabulary Recorder")
                     state = "countdown"
                     countdown_start = time.time()
                     countdown_val = countdown_secs
@@ -295,6 +381,9 @@ def record_session(
 
                 elif key == ord("r") and state == "saved" and last_saved_path is not None:
                     last_saved_path.unlink(missing_ok=True)
+                    # Also remove sidecar if present
+                    sidecar = last_saved_path.with_suffix(".json")
+                    sidecar.unlink(missing_ok=True)
                     collected -= 1
                     stats[label] = collected
                     print(f"  Deleted last sample. ({collected}/{target})")
@@ -338,6 +427,11 @@ def _parse_args(argv=None):
         "--resume", action="store_true",
         help="Skip words that already have >= target samples",
     )
+    p.add_argument(
+        "--diversity-matrix", action="store_true",
+        help="Prompt for angle (front/30L/30R) and lighting (bright/dim) metadata "
+             "before each take; writes a JSON sidecar alongside each .npy file.",
+    )
     return p.parse_args(argv)
 
 
@@ -359,6 +453,7 @@ if __name__ == "__main__":
         out_dir=args.out,
         signer=args.signer,
         target=args.target,
+        diversity_matrix=args.diversity_matrix,
         countdown_secs=args.countdown,
     )
 
