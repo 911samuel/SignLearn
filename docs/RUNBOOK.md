@@ -55,16 +55,21 @@ Without dropping WebSocket connections:
 # 1. Export new checkpoint to ONNX
 make export-onnx IN=artifacts/runs/new-run/checkpoints/bilstm_best.keras
 
-# 2. Profile it
+# 2. Profile it (must pass p95 < 30ms gate)
 make profile MODEL=artifacts/runs/new-run/bilstm_best.onnx
 
 # 3. Trigger in-process reload via the admin endpoint
+#    Requires SIGNLEARN_ADMIN_TOKEN to be set on the server.
+export SIGNLEARN_ADMIN_TOKEN="your-secret-token"
 curl -X POST http://127.0.0.1:5001/admin/reload \
+     -H "X-Admin-Token: $SIGNLEARN_ADMIN_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"path": "artifacts/runs/new-run/bilstm_best.onnx"}'
 ```
 
-If reload fails, the old model stays active. Check `load_error` in `/health`.
+**Security:** `/admin/reload` is disabled (returns 403) if `SIGNLEARN_ADMIN_TOKEN` env var is not set. Always set this before starting the server in any environment where the endpoint should be usable.
+
+If reload fails (returns 503), the old model stays active. Check `load_error` in `/health`.
 
 ## Model not loading (503)
 

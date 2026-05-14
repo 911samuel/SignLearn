@@ -10,7 +10,7 @@ SignLearn is a real-time American Sign Language (ASL) recognition system. MediaP
 **Member B** (Full-Stack + Frontend Lead): Flask backend, WebSocket, React UI, speech-to-text — branch `dev-web`.
 
 Vocabulary: 93 classes — `a`–`z` (26), `0`–`9` (10), 24 static words, 33 dynamic words (snake_case). Full list: `docs/vocabulary.md`.  
-Currently trained on **36 classes** (26 letters + 10 digits, ~62K augmented sequences). Best single-run: BiLSTM+raw 83.5% test acc. Phase 3 sweep (raw features, 4 architectures) is in progress. See `artifacts/reports/` for current benchmarks.
+Currently trained on **36 classes** (26 letters + 10 digits, ~62K augmented sequences). Best single-run: BiLSTM+raw 83.5% test acc. Phase 3 sweep (raw features, 4 architectures) is in progress. ONNX export verified: p95 = 5.6ms, 196 fps (Phase 4 target: <30ms ✅). See `artifacts/reports/` for current benchmarks.
 
 ---
 
