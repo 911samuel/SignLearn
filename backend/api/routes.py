@@ -176,6 +176,68 @@ def post_correction():
     return jsonify({"id": row_id, "status": "ok"}), 201
 
 
+# ---------------------------------------------------------------------------
+# Admin — hot-swap model checkpoint
+# ---------------------------------------------------------------------------
+
+@bp.post("/admin/reload")
+def admin_reload():
+    """Atomically hot-swap the active model without dropping connections.
+
+    Body (JSON)::
+
+        {"path": "artifacts/runs/bilstm-v2/checkpoints/bilstm_best.keras"}
+
+    Requires ``X-Admin-Token`` header matching ``SIGNLEARN_ADMIN_TOKEN`` env var.
+    If the env var is unset the endpoint is **disabled** (returns 403) to
+    prevent accidental hot-swaps in production.
+
+    On success returns::
+
+        {"status": "ok", "sha256": "<hex>", "backend": "keras"|"onnx"}
+
+    On failure the old model remains active and the response is::
+
+        {"status": "error", "detail": "<reason>"}
+    """
+    import os
+    from pathlib import Path as _Path
+
+    admin_token = os.environ.get("SIGNLEARN_ADMIN_TOKEN", "")
+    if not admin_token:
+        return jsonify({"error": "admin reload is disabled (SIGNLEARN_ADMIN_TOKEN not set)"}), 403
+
+    provided = request.headers.get("X-Admin-Token", "")
+    if provided != admin_token:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    path_str = data.get("path", "")
+    if not path_str:
+        return jsonify({"error": "body must contain 'path'"}), 400
+
+    target = _Path(path_str)
+    if not target.is_absolute():
+        # Resolve relative to repo root (two levels above backend/).
+        _repo_root = _Path(__file__).resolve().parents[2]
+        target = _repo_root / target
+
+    ok = model_loader.reload_model(target)
+    if ok:
+        info = model_loader.get_model_info()
+        return jsonify({
+            "status": "ok",
+            "sha256": info["sha256"],
+            "backend": info["backend"],
+            "n_classes": info["n_classes"],
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "detail": model_loader.get_load_error(),
+        }), 503
+
+
 @bp.delete("/transcript")
 def delete_transcript():
     """Clear messages for a room (dev convenience).

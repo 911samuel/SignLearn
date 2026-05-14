@@ -104,8 +104,7 @@ def profile(
     return stats
 
 
-def write_profile_report(stats: dict, model_path: Path, reports_dir: Path) -> Path:
-    target_ms = 500.0
+def write_profile_report(stats: dict, model_path: Path, reports_dir: Path, target_ms: float = 30.0) -> Path:
     p95 = stats["p95_ms"]
     status = "PASS ✅" if p95 < target_ms else "FAIL ❌"
 
@@ -114,30 +113,32 @@ def write_profile_report(stats: dict, model_path: Path, reports_dir: Path) -> Pa
     except ValueError:
         rel_model = model_path
 
-    report = f"""# Phase 2 — Inference Latency Profile
+    report = f"""# Inference Latency Profile — {stats.get('backend', 'keras').upper()}
 
 **Model:** `{rel_model}`
+**Backend:** {stats.get('backend', 'keras').upper()}
 **Device:** {stats.get('device', 'CPU').upper()} (single sample, no batching)
 **Runs:** {stats['n_runs']}
+**Params:** {stats.get('param_count', 0):,}
 **Target p95 latency:** < {target_ms:.0f} ms
 
 ## Results
 
 | Stat | Value |
 |---|---|
-| Mean | {stats['mean_ms']:.1f} ms |
-| Std  | {stats['std_ms']:.1f} ms |
-| Min  | {stats['min_ms']:.1f} ms |
-| p50  | {stats['p50_ms']:.1f} ms |
-| p95  | {stats['p95_ms']:.1f} ms |
-| p99  | {stats['p99_ms']:.1f} ms |
-| Max  | {stats['max_ms']:.1f} ms |
+| Mean | {stats['mean_ms']:.2f} ms |
+| Std  | {stats['std_ms']:.2f} ms |
+| Min  | {stats['min_ms']:.2f} ms |
+| p50  | {stats['p50_ms']:.2f} ms |
+| **p95**  | **{stats['p95_ms']:.2f} ms** |
+| p99  | {stats['p99_ms']:.2f} ms |
+| Max  | {stats['max_ms']:.2f} ms |
 | Throughput | {stats['throughput_fps']:.1f} samples/sec |
 
 ## Verdict
 
-**p95 = {p95:.1f} ms — {status}**
-{"Real-time feasible: well within the 500 ms Phase 2 target." if p95 < target_ms else "Exceeds target — optimisation required before Phase 3 integration."}
+**p95 = {p95:.2f} ms — {status}**
+{"Real-time feasible: within the Phase 4 target." if p95 < target_ms else f"Exceeds {target_ms:.0f} ms target — try ONNX export: make export-onnx IN=<path>"}
 """
 
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -179,9 +180,10 @@ def _parse_args(argv=None):
     p.add_argument(
         "--max-p95-ms",
         type=float,
-        default=500.0,
-        help="Phase 2 latency target. Exit non-zero if p95 exceeds this. "
-             "Set to 0 to disable the gate.",
+        default=30.0,
+        help="Phase 4 latency target. Exit non-zero if p95 exceeds this. "
+             "Set to 0 to disable the gate. (default: 30 ms for ONNX backend; "
+             "Keras CPU is typically 100-400 ms — use --max-p95-ms 0 when profiling Keras.)",
     )
     return p.parse_args(argv)
 
@@ -193,7 +195,7 @@ if __name__ == "__main__":
     print(f"Profiling {args.n} single-sample inferences on {device_label} ({args.backend}) …")
     stats = profile(args.model, n_runs=args.n, device=args.device, backend=args.backend)
 
-    report_path = write_profile_report(stats, args.model, args.reports_dir)
+    report_path = write_profile_report(stats, args.model, args.reports_dir, target_ms=args.max_p95_ms if args.max_p95_ms > 0 else 30.0)
     print(f"\nLatency profile → {report_path}")
     print(f"  mean={stats['mean_ms']:.1f} ms  "
           f"p50={stats['p50_ms']:.1f} ms  "
@@ -201,15 +203,17 @@ if __name__ == "__main__":
           f"p99={stats['p99_ms']:.1f} ms  "
           f"throughput={stats['throughput_fps']:.1f} fps")
 
-    final_path = export_final(args.model, args.out_dir)
-    print(f"\nFinal export    → {final_path}  (Phase 3 handoff)")
+    # Only export a final .keras copy if in Keras mode (not useful for ONNX re-export).
+    if stats.get("backend") == "keras":
+        final_path = export_final(args.model, args.out_dir)
+        print(f"\nFinal export    → {final_path}")
 
     p95 = stats["p95_ms"]
     if args.max_p95_ms > 0 and p95 > args.max_p95_ms:
         print(
-            f"\n[FAIL] p95 = {p95:.1f} ms exceeds the Phase 2 target of "
+            f"\n[FAIL] p95 = {p95:.2f} ms exceeds the Phase 4 target of "
             f"{args.max_p95_ms:.0f} ms.",
             file=sys.stderr,
         )
         sys.exit(1)
-    print(f"\n[PASS] p95 = {p95:.1f} ms — within Phase 2 target ({args.max_p95_ms:.0f} ms).")
+    print(f"\n[PASS] p95 = {p95:.2f} ms — within target ({args.max_p95_ms:.0f} ms).")

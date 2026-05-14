@@ -108,7 +108,6 @@ def evaluate(
     }
 
     # Top confusion pairs (true_label, predicted_label, count)
-    import numpy as np
     cm_tmp = confusion_matrix(y_true, y_pred, labels=list(range(len(names))))
     np.fill_diagonal(cm_tmp, 0)
     top_confusion_pairs = []
@@ -265,8 +264,7 @@ def compare_runs(
         # Top confusion pairs from the best run's metrics
         best_metrics_path = runs_root / best["run"] / "reports" / "metrics.json"
         if best_metrics_path.exists():
-            import json as _json
-            bm = _json.load(open(best_metrics_path))
+            bm = json.load(open(best_metrics_path))
             pairs = bm.get("top_confusion_pairs", [])
             if pairs:
                 lines += ["", f"### Top confusion pairs (best run: `{best['run']}`)", "",
