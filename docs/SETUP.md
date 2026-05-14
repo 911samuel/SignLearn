@@ -86,11 +86,22 @@ export SIGNLEARN_SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex
 make serve
 ```
 
-To use the ONNX checkpoint instead of the default Keras one, set `SIGNLEARN_MODEL_PATH`:
+To use the ONNX checkpoint instead of the default Keras one, set `SIGNLEARN_MODEL_PATH`
+(ONNX is ~8× faster: p95 = 5.6ms vs 46ms for Keras):
 
 ```bash
-export SIGNLEARN_MODEL_PATH=artifacts/runs/bilstm-eng-v1/bilstm_best.onnx
-make serve
+# Export Keras → ONNX first (one-time)
+make export-onnx IN=artifacts/runs/bilstm-v2-36cls/checkpoints/bilstm_best.keras
+
+# Serve with the ONNX model
+export SIGNLEARN_MODEL_PATH=artifacts/runs/bilstm-v2-36cls/bilstm_best.onnx
+make serve-onnx
+```
+
+To enable the hot-swap admin endpoint:
+```bash
+export SIGNLEARN_ADMIN_TOKEN=$(python -c 'import secrets; print(secrets.token_hex(32))')
+make serve-onnx
 ```
 
 ## 8. Start the frontend
@@ -113,7 +124,8 @@ make test-file FILE=tests/test_augment.py
 | Variable | Default | Description |
 |---|---|---|
 | `SIGNLEARN_SECRET_KEY` | *required in prod* | Flask session secret — generate with `secrets.token_hex(32)` |
-| `SIGNLEARN_MODEL_PATH` | `artifacts/checkpoints/lstm_best.keras` | Path to the active checkpoint |
+| `SIGNLEARN_MODEL_PATH` | `artifacts/checkpoints/lstm_best.keras` | Path to the active `.keras` or `.onnx` checkpoint |
+| `SIGNLEARN_ADMIN_TOKEN` | *(unset — disables endpoint)* | Token for `POST /admin/reload` hot-swap; use a random hex string |
 | `SIGNLEARN_ASYNC_MODE` | `threading` | Flask-SocketIO async mode (`threading` for tests) |
 | `FLASK_DEBUG` | `0` | Set to `1` to enable debug mode (insecure default secret allowed) |
 | `VITE_BACKEND_URL` | `http://127.0.0.1:5001` | Frontend → backend URL |
