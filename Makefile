@@ -41,6 +41,10 @@ label-map:
 audit:
 	$(PYTHON) backend/scripts/audit_dataset.py
 
+## Augment minority classes to TARGET samples: make augment TARGET=600
+augment:
+	$(PYTHON) backend/scripts/augment_minority.py --target-count $(TARGET)
+
 ## Record a new landmark sequence from webcam (usage: make record LABEL=hello)
 record:
 	$(PYTHON) backend/scripts/record_vocabulary.py --words $(LABEL)
