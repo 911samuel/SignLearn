@@ -66,9 +66,14 @@ train:
 sweep:
 	$(PYTHON) backend/scripts/sweep.py --config $(SWEEP_CFG)
 
-## Compare all runs in artifacts/runs/
+## Evaluate + compare all runs in artifacts/runs/
 compare:
 	$(PYTHON) backend/scripts/evaluate_model.py
+
+## Evaluate a single run: make eval RUN=bilstm-v2-36cls
+RUN ?= bilstm-v2-36cls
+eval:
+	$(PYTHON) backend/scripts/evaluate_model.py --runs $(RUN)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ONNX export and profiling
@@ -86,9 +91,14 @@ profile:
 # Serving
 # ──────────────────────────────────────────────────────────────────────────────
 
-## Start the Flask/SocketIO backend (http://127.0.0.1:5001)
+## Start the Flask/SocketIO backend with default model (http://127.0.0.1:5001)
 serve:
 	$(PYTHON) backend/scripts/run_server.py
+
+## Start the backend serving a specific ONNX checkpoint (usage: make serve-onnx MODEL=path/to/model.onnx)
+MODEL ?= artifacts/runs/bilstm-v2-36cls/bilstm_best.onnx
+serve-onnx:
+	SIGNLEARN_MODEL_PATH=$(MODEL) $(PYTHON) backend/scripts/run_server.py
 
 ## Start the Next.js frontend dev server (http://localhost:5173)
 frontend:
