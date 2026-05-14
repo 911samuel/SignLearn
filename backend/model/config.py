@@ -58,6 +58,13 @@ def _default_num_classes() -> int:
         return 1
 
 
+def _load_yaml(path: Path) -> dict:
+    """Lazy yaml import — keeps yaml an optional dep for callers that never use it."""
+    import yaml  # type: ignore[import-untyped]
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+
+
 @dataclass
 class TrainConfig:
     """Hyperparameters for the SignLearn sequence classifier.
@@ -96,3 +103,22 @@ class TrainConfig:
     min_lr: float = 1e-6
 
     seed: int = 42
+
+    @classmethod
+    def from_yaml(cls, path: Path | str) -> "TrainConfig":
+        """Load a TrainConfig from a YAML file.
+
+        Unknown keys are silently ignored so YAML files can carry extra
+        sweep-only metadata (eg. ``run_name``, ``notes``) without breaking
+        the dataclass constructor. Known scalar fields are coerced to the
+        dataclass's annotated types where possible.
+        """
+        data = _load_yaml(Path(path))
+        allowed = {f.name for f in cls.__dataclass_fields__.values()}
+        kwargs = {k: v for k, v in data.items() if k in allowed}
+        # tuple coercions for fields the dataclass declares as tuples
+        if isinstance(kwargs.get("lstm_units"), list):
+            kwargs["lstm_units"] = tuple(kwargs["lstm_units"])
+        if isinstance(kwargs.get("input_shape"), list):
+            kwargs["input_shape"] = tuple(kwargs["input_shape"])
+        return cls(**kwargs)

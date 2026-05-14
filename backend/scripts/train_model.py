@@ -241,16 +241,21 @@ def train(
 
 
 def _parse_args(argv=None):
+    from backend.model.architectures import ARCHITECTURE_REGISTRY
+    from backend.data.features import FEATURE_MODES
     p = argparse.ArgumentParser(description="Train a SignLearn sequence classifier")
     p.add_argument("--arch",         type=str,  default="lstm",
-                   choices=["lstm", "bilstm", "transformer"])
+                   choices=sorted(ARCHITECTURE_REGISTRY))
     p.add_argument("--feature-mode", type=str,  default="raw",
-                   choices=["raw", "raw+velocity", "raw+velocity+angles"])
+                   choices=list(FEATURE_MODES))
+    p.add_argument("--config",       type=Path, default=None,
+                   help="YAML config file (overrides individual CLI flags except --run-name)")
     p.add_argument("--run-name",     type=str,  default=None,
                    help="Optional subdirectory under <out-dir>/runs/ for this experiment")
     p.add_argument("--epochs",       type=int,  default=None)
     p.add_argument("--batch-size",   type=int,  default=None)
     p.add_argument("--lr",           type=float,default=None)
+    p.add_argument("--dropout",      type=float,default=None)
     p.add_argument("--data-dir",     type=Path, default=PROCESSED_DIR)
     p.add_argument("--out-dir",      type=Path, default=ARTIFACTS_DIR)
     return p.parse_args(argv)
@@ -259,12 +264,19 @@ def _parse_args(argv=None):
 if __name__ == "__main__":
     args = _parse_args()
 
-    config = TrainConfig(arch_name=args.arch, feature_mode=args.feature_mode)
+    if args.config is not None:
+        config = TrainConfig.from_yaml(args.config)
+    else:
+        config = TrainConfig(arch_name=args.arch, feature_mode=args.feature_mode)
+
+    # CLI flag overrides applied on top of YAML (handy for sweep harness reruns).
     if args.epochs is not None:
         config.epochs = args.epochs
     if args.batch_size is not None:
         config.batch_size = args.batch_size
     if args.lr is not None:
         config.learning_rate = args.lr
+    if args.dropout is not None:
+        config.dropout = args.dropout
 
     train(config, data_dir=args.data_dir, out_dir=args.out_dir, run_name=args.run_name)

@@ -26,11 +26,29 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import statistics
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+
+# Filename convention: <label>_s<signer>_<idx>.npy (e.g. hello_s02_0042.npy).
+# Allow the label itself to contain underscores (e.g. thank_you).
+_SIGNER_RE = re.compile(r"_s(\d+)_\d+$")
+
+
+def _extract_signer_id(stem: str) -> str | None:
+    """Return the signer ID embedded in a filename stem, or None if absent.
+
+    Conservative: matches only the strict `_s<digits>_<digits>` suffix so
+    legacy filenames without explicit signer IDs (eg. MD5-pseudo-subject
+    files from the Kaggle alphabet ingest) are reported as `None` rather
+    than silently misattributed.
+    """
+    m = _SIGNER_RE.search(stem)
+    return m.group(1) if m else None
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
@@ -108,6 +126,7 @@ def _audit_split(split: str, data_dir: Path) -> dict:
             "label": name,
             "hash": _sha256(arr),
             "zero_frame_ratio": _zero_frame_ratio(arr),
+            "signer_id": _extract_signer_id(path.stem),
         })
 
     counts = list(per_class_counts.values())
@@ -121,6 +140,26 @@ def _audit_split(split: str, data_dir: Path) -> dict:
     for rec in sample_records:
         hash_groups.setdefault(rec["hash"], []).append(rec["path"])
     dupes_within = [paths for paths in hash_groups.values() if len(paths) > 1]
+
+    # Signer-level statistics: how many distinct signers, per-signer sample
+    # counts, per-signer zero-frame mean (useful for spotting bad recordings).
+    per_signer_counts: dict[str, int] = defaultdict(int)
+    per_signer_zero_mean: dict[str, list[float]] = defaultdict(list)
+    n_unknown_signer = 0
+    for rec in sample_records:
+        sid = rec["signer_id"]
+        if sid is None:
+            n_unknown_signer += 1
+            continue
+        per_signer_counts[sid] += 1
+        per_signer_zero_mean[sid].append(rec["zero_frame_ratio"])
+    per_signer_summary = {
+        sid: {
+            "count": per_signer_counts[sid],
+            "zero_frame_mean": round(statistics.mean(per_signer_zero_mean[sid]), 4),
+        }
+        for sid in sorted(per_signer_counts)
+    }
 
     return {
         "split": split,
@@ -145,6 +184,8 @@ def _audit_split(split: str, data_dir: Path) -> dict:
         "bad_shape": bad_shape,
         "out_of_range_after_normalize": out_of_range,
         "duplicates_within_split": dupes_within,
+        "per_signer_summary": per_signer_summary,
+        "n_unknown_signer": n_unknown_signer,
         "_samples": sample_records,  # private, used for cross-split leakage check
     }
 
@@ -161,6 +202,80 @@ def _cross_split_leakage(splits: list[dict]) -> list[dict]:
         if len(unique_splits) > 1:
             leaks.append({"hash": h, "occurrences": locs})
     return leaks
+
+
+def per_signer_leakage(splits: list[dict]) -> dict:
+    """Detect signer IDs that appear in more than one split.
+
+    Pure signer-leakage check: a model that learns signer-specific quirks will
+    score higher on val/test than it would on unseen people if any signer ID
+    appears in multiple splits. Returns the offenders + a clean per-split
+    signer set summary suitable for an `audit_signers.md` report.
+
+    Returns
+    -------
+    {
+        "split_signers":  {split_name: sorted([signer_ids])},
+        "overlaps":       [{"signer": sid, "splits": ["train", "val"]}, ...],
+        "n_unknown":      {split_name: int}  # samples without parseable signer ID
+    }
+    """
+    split_signers: dict[str, set[str]] = {}
+    n_unknown: dict[str, int] = {}
+    for s in splits:
+        signers = {rec["signer_id"] for rec in s["_samples"] if rec["signer_id"]}
+        split_signers[s["split"]] = signers
+        n_unknown[s["split"]] = sum(1 for rec in s["_samples"] if rec["signer_id"] is None)
+
+    overlaps: list[dict] = []
+    all_ids: set[str] = set().union(*split_signers.values())
+    for sid in sorted(all_ids):
+        occ = [name for name, ids in split_signers.items() if sid in ids]
+        if len(occ) > 1:
+            overlaps.append({"signer": sid, "splits": occ})
+
+    return {
+        "split_signers": {k: sorted(v) for k, v in split_signers.items()},
+        "overlaps": overlaps,
+        "n_unknown": n_unknown,
+    }
+
+
+def render_signer_markdown(signer_report: dict) -> str:
+    """Render the per-signer leakage report as standalone markdown."""
+    lines = ["# SignLearn — Per-Signer Leakage Audit", ""]
+    overlaps = signer_report["overlaps"]
+    if overlaps:
+        lines.append(f"## ⚠️ {len(overlaps)} signer ID(s) leak across splits")
+        lines.append("")
+        lines.append("| Signer | Splits |")
+        lines.append("|---|---|")
+        for o in overlaps:
+            lines.append(f"| `{o['signer']}` | {', '.join(o['splits'])} |")
+        lines.append("")
+        lines.append(
+            "**Fix:** remove the offending files from val/test, or re-assign "
+            "by editing `_SIGNER_SPLIT` in `extract.py`. A signer who appears "
+            "in train *and* val will inflate val accuracy by the model "
+            "memorizing their idiosyncratic landmark patterns."
+        )
+        lines.append("")
+    else:
+        lines.append("✅ No signer leakage detected across train/val/test.")
+        lines.append("")
+
+    lines.append("## Per-split signer inventory")
+    lines.append("")
+    for split, ids in signer_report["split_signers"].items():
+        unknown = signer_report["n_unknown"].get(split, 0)
+        lines.append(f"### `{split}` — {len(ids)} signer(s), {unknown} sample(s) with unknown signer")
+        lines.append("")
+        if ids:
+            lines.append(f"Signer IDs: {', '.join(f'`{s}`' for s in ids)}")
+        else:
+            lines.append("(no signer IDs parsed)")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def _recommendation_block(splits: list[dict]) -> dict:
@@ -268,6 +383,7 @@ def render_markdown(report: dict) -> str:
 def audit(data_dir: Path, out_dir: Path) -> dict:
     splits = [_audit_split(s, data_dir) for s in ("train", "val", "test")]
     leakage = _cross_split_leakage(splits)
+    signer_leakage = per_signer_leakage(splits)
     # Strip the private _samples blob from the JSON output to keep it small.
     for s in splits:
         s.pop("_samples", None)
@@ -275,15 +391,24 @@ def audit(data_dir: Path, out_dir: Path) -> dict:
         "data_dir": str(data_dir),
         "splits": splits,
         "cross_split_leakage": leakage,
+        "signer_leakage": signer_leakage,
         "recommendation": _recommendation_block(splits),
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "dataset_audit.json"
     md_path   = out_dir / "dataset_audit.md"
+    signer_md = out_dir / "audit_signers.md"
     json_path.write_text(json.dumps(report, indent=2))
     md_path.write_text(render_markdown(report))
-    print(f"JSON  → {json_path}")
-    print(f"MD    → {md_path}")
+    signer_md.write_text(render_signer_markdown(signer_leakage))
+    print(f"JSON       → {json_path}")
+    print(f"MD         → {md_path}")
+    print(f"Signer MD  → {signer_md}")
+    if signer_leakage["overlaps"]:
+        print(
+            f"⚠️  {len(signer_leakage['overlaps'])} signer ID(s) leak across splits — "
+            f"see {signer_md}"
+        )
     return report
 
 
