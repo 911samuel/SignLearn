@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from flask import Blueprint, jsonify, request
 
 from backend.api.config import CONFIG
@@ -10,14 +12,18 @@ from backend.api.rooms import STORE
 
 bp = Blueprint("api", __name__)
 
+_SERVER_START = time.time()
+
 
 def _model_status() -> dict:
-    loaded = model_loader.is_loaded()
+    info = model_loader.get_model_info()
     return {
-        "model_loaded": loaded,
-        "num_classes": len(model_loader.get_class_names()) if loaded else None,
+        "model_loaded": info["loaded"],
+        "backend": info["backend"],
+        "num_classes": info["n_classes"] if info["loaded"] else None,
         "model_path": str(CONFIG.model_path),
-        "load_error": model_loader.get_load_error(),
+        "model_sha256": info["sha256"],
+        "load_error": info["load_error"],
     }
 
 
@@ -27,12 +33,27 @@ def _model_status() -> dict:
 
 @bp.get("/health")
 def health():
+    uptime = round(time.time() - _SERVER_START, 1)
     return jsonify({
         "status": "ok",
+        "uptime_seconds": uptime,
         "sequence_len": CONFIG.sequence_len,
         "feature_dim": CONFIG.feature_dim,
         **_model_status(),
     })
+
+
+# ---------------------------------------------------------------------------
+# Metrics (Prometheus text format or JSON)
+# ---------------------------------------------------------------------------
+
+@bp.get("/metrics")
+def metrics():
+    from backend.api.telemetry import METRICS
+    fmt = request.args.get("format", "prometheus").lower()
+    if fmt == "json":
+        return jsonify(METRICS.to_dict())
+    return METRICS.to_prometheus(), 200, {"Content-Type": "text/plain; version=0.0.4; charset=utf-8"}
 
 
 # ---------------------------------------------------------------------------

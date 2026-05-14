@@ -28,36 +28,70 @@ sys.path.insert(0, str(_REPO_ROOT))
 from backend.model.config import CHECKPOINTS_DIR, FEATURE_DIM, REPORTS_DIR, SEQUENCE_LEN
 
 
-def profile(model_path: Path, n_runs: int = 1000, device: str = "cpu") -> dict:
+def profile(
+    model_path: Path,
+    n_runs: int = 1000,
+    device: str = "cpu",
+    backend: str = "auto",
+) -> dict:
     """Run n_runs single-sample inferences and return latency stats (ms).
 
     Args:
-        model_path: Path to a saved .keras or .h5 model file.
+        model_path: Path to a saved .keras / .h5 / .onnx model file.
         n_runs:     Number of timed forward passes (after 10-run warm-up).
         device:     ``"cpu"`` forces CPU-only inference (reproducible baseline).
                     ``"gpu"`` allows TensorFlow to use an available GPU/MPS device.
+        backend:    ``"keras"`` | ``"onnx"`` | ``"auto"`` (default: infer from suffix).
     """
     if device == "cpu":
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    model = tf.keras.models.load_model(str(model_path))
-    print(f"Loaded: {model_path}  ({model.count_params():,} params)")
 
-    dummy = np.zeros((1, SEQUENCE_LEN, FEATURE_DIM), dtype=np.float32)
+    suffix = Path(model_path).suffix.lower()
+    if backend == "auto":
+        backend = "onnx" if suffix == ".onnx" else "keras"
 
-    # Warm-up: 10 passes so TF graph is compiled before we time
-    for _ in range(10):
-        model.predict(dummy, verbose=0)
+    feature_dim = FEATURE_DIM
+    param_count = 0
+    if backend == "onnx":
+        from backend.api.onnx_runner import OnnxRunner
+        model = OnnxRunner(Path(model_path))
+        # ONNX input dim may exceed FEATURE_DIM when feature_mode != "raw".
+        try:
+            import onnxruntime as ort
+            sess = ort.InferenceSession(str(model_path))
+            shape = sess.get_inputs()[0].shape
+            feature_dim = int(shape[-1])
+        except Exception:  # noqa: BLE001
+            pass
+        param_count = model.count_params()
+        print(f"Loaded (ONNX): {model_path}  (~{param_count:,} params, feature_dim={feature_dim})")
+        predict = model.predict
+    else:
+        model = tf.keras.models.load_model(str(model_path))
+        param_count = int(model.count_params())
+        feature_dim = int(model.input_shape[-1])
+        print(f"Loaded (Keras): {model_path}  ({param_count:,} params, feature_dim={feature_dim})")
+        predict = lambda x: model.predict(x, verbose=0)  # noqa: E731
+
+    dummy = np.zeros((1, SEQUENCE_LEN, feature_dim), dtype=np.float32)
+
+    # Warm-up — bigger for ONNX since it JITs kernels lazily.
+    for _ in range(20 if backend == "onnx" else 10):
+        predict(dummy)
 
     latencies_ms = []
     for _ in range(n_runs):
         t0 = time.perf_counter()
-        model.predict(dummy, verbose=0)
+        predict(dummy)
         latencies_ms.append((time.perf_counter() - t0) * 1000)
 
     arr = np.array(latencies_ms)
     stats = {
         "n_runs": n_runs,
         "device": device,
+        "backend": backend,
+        "param_count": param_count,
+        "feature_dim": feature_dim,
         "mean_ms":   float(np.mean(arr)),
         "std_ms":    float(np.std(arr)),
         "min_ms":    float(np.min(arr)),
@@ -137,6 +171,12 @@ def _parse_args(argv=None):
              "'gpu' enables tensorflow-metal / CUDA for GPU latency measurement.",
     )
     p.add_argument(
+        "--backend",
+        choices=["auto", "keras", "onnx"],
+        default="auto",
+        help="Inference backend (default: auto-detect from file extension).",
+    )
+    p.add_argument(
         "--max-p95-ms",
         type=float,
         default=500.0,
@@ -150,8 +190,8 @@ if __name__ == "__main__":
     args = _parse_args()
 
     device_label = args.device.upper()
-    print(f"Profiling {args.n} single-sample inferences on {device_label} …")
-    stats = profile(args.model, n_runs=args.n, device=args.device)
+    print(f"Profiling {args.n} single-sample inferences on {device_label} ({args.backend}) …")
+    stats = profile(args.model, n_runs=args.n, device=args.device, backend=args.backend)
 
     report_path = write_profile_report(stats, args.model, args.reports_dir)
     print(f"\nLatency profile → {report_path}")

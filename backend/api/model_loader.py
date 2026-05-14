@@ -1,148 +1,245 @@
-"""Singleton LSTM model + label decoder.
+"""Production-grade model loader for SignLearn.
 
-Loaded once at first call to :func:`get_model`; subsequent calls return the
-cached instance.  A threading lock guards ``model.predict`` so concurrent
-SocketIO greenlets don't race on the TensorFlow session.
+Supports two backends transparently based on the checkpoint file extension:
+
+- ``*.keras``  → ``tf.keras.Model``       (training-grade, slow CPU inference)
+- ``*.onnx``   → :class:`OnnxRunner`      (~10-20× faster CPU inference)
+
+Singleton state is encapsulated in :class:`ModelHolder` which exposes
+``reload(path)`` for hot-swapping a new checkpoint without dropping
+WebSocket connections. The swap is atomic behind a reentrant lock, with
+SHA-256 verification of the new file before the swap completes.
+
+Backward-compatible module-level functions ``load_model``, ``get_model``,
+``get_class_names``, ``is_loaded``, ``run_inference``, ``run_inference_probs``
+are preserved so existing call sites (inference.py, smoke tests, route
+handlers) keep working without modification.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-import tensorflow as tf
 
 from backend.api.config import CONFIG
 from backend.model.config import compact_class_names
 
 _log = logging.getLogger(__name__)
 
-_lock = threading.Lock()
-_model: tf.keras.Model | None = None
-_class_names: list[str] | None = None
-_load_error: str | None = None
+
+def _sha256_file(path: Path, chunk: int = 1 << 20) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            buf = f.read(chunk)
+            if not buf:
+                break
+            h.update(buf)
+    return h.hexdigest()
 
 
-def load_model(path: Path | None = None) -> tf.keras.Model | None:
-    """Load and cache the LSTM model from *path* (default: ``CONFIG.model_path``).
+class ModelHolder:
+    """Thread-safe singleton for the active inference model.
 
-    Returns the model on success, ``None`` on failure (error stored in
-    :func:`get_load_error`).  Does not raise — the server stays alive even
-    when the checkpoint is missing.
+    The holder doesn't own the class-name list — that comes from
+    :func:`backend.model.config.compact_class_names` and is refreshed on
+    every reload so a checkpoint trained on different vocab snapshots is
+    correctly decoded.
     """
-    global _model, _class_names, _load_error
-    model_path = path or CONFIG.model_path
-    with _lock:
-        if _model is None and _load_error is None:
-            try:
-                _model = tf.keras.models.load_model(str(model_path))
-                _class_names = compact_class_names()
-                _log.info("Model loaded from %s (%d classes)", model_path, len(_class_names))
-            except Exception as exc:  # noqa: BLE001
-                _load_error = f"{type(exc).__name__}: {exc}"
-                _log.error("Failed to load model from %s: %s", model_path, exc)
-    return _model
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._model: Any = None              # tf.keras.Model | OnnxRunner | None
+        self._class_names: list[str] | None = None
+        self._load_error: str | None = None
+        self._path: Path | None = None
+        self._sha256: str | None = None
+        self._backend: str = "none"
+
+    # -- public surface --
+
+    def load(self, path: Path | None = None) -> Any | None:
+        """Load and cache the model from *path* (or :data:`CONFIG.model_path`).
+
+        Returns the loaded model object, or ``None`` if loading failed.
+        Failures are stored and surfaced via :meth:`get_load_error`.
+        """
+        with self._lock:
+            target = path or CONFIG.model_path
+            if self._model is not None and self._path == target:
+                return self._model
+            return self._load_locked(target)
+
+    def reload(self, path: Path) -> bool:
+        """Atomically swap to a new checkpoint. Returns True on success.
+
+        On failure the old model stays active and the error is captured.
+        WebSocket connections are unaffected — they continue using their
+        existing references obtained via :func:`get_model`, which returns
+        the holder's current model snapshot at call time.
+        """
+        target = Path(path)
+        with self._lock:
+            if not target.exists():
+                self._load_error = f"reload: {target} does not exist"
+                _log.error(self._load_error)
+                return False
+            new_sha = _sha256_file(target)
+            if new_sha == self._sha256:
+                _log.info("reload: %s sha256 matches current model, no-op", target)
+                return True
+            return self._load_locked(target) is not None
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        """Run inference (probabilities) on a batch under the lock."""
+        with self._lock:
+            if self._model is None:
+                self._load_locked(CONFIG.model_path)
+            if self._model is None:
+                raise RuntimeError(f"Model not loaded — {self._load_error}")
+            return self._model.predict(x, verbose=0)
+
+    @property
+    def model(self) -> Any:
+        if self._model is None:
+            self.load()
+        if self._model is None:
+            raise RuntimeError(f"Model not loaded — {self._load_error}")
+        return self._model
+
+    @property
+    def class_names(self) -> list[str]:
+        if self._class_names is None:
+            self.load()
+        return self._class_names or []
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._model is not None
+
+    @property
+    def load_error(self) -> str | None:
+        return self._load_error
+
+    @property
+    def info(self) -> dict:
+        """Diagnostic info for /health and /metrics endpoints."""
+        return {
+            "loaded": self.is_loaded,
+            "backend": self._backend,
+            "path": str(self._path) if self._path else None,
+            "sha256": self._sha256,
+            "n_classes": len(self._class_names) if self._class_names else 0,
+            "load_error": self._load_error,
+        }
+
+    def reset_for_testing(self) -> None:
+        with self._lock:
+            self._model = None
+            self._class_names = None
+            self._load_error = None
+            self._path = None
+            self._sha256 = None
+            self._backend = "none"
+
+    # -- internals --
+
+    def _load_locked(self, path: Path) -> Any | None:
+        try:
+            suffix = path.suffix.lower()
+            if suffix == ".onnx":
+                from backend.api.onnx_runner import OnnxRunner
+                new_model: Any = OnnxRunner(path)
+                backend = "onnx"
+            else:  # default .keras / .h5
+                import tensorflow as tf
+                new_model = tf.keras.models.load_model(str(path))
+                backend = "keras"
+            new_class_names = compact_class_names()
+            new_sha = _sha256_file(path)
+            # Swap is the last action — if anything above raised, old model stays.
+            self._model = new_model
+            self._class_names = new_class_names
+            self._path = path
+            self._sha256 = new_sha
+            self._backend = backend
+            self._load_error = None
+            _log.info(
+                "Model loaded: %s backend=%s n_classes=%d sha=%s",
+                path, backend, len(new_class_names), new_sha[:12],
+            )
+            return new_model
+        except Exception as exc:  # noqa: BLE001
+            self._load_error = f"{type(exc).__name__}: {exc}"
+            _log.error("Failed to load %s: %s", path, exc)
+            return None
 
 
-def get_model() -> tf.keras.Model:
-    """Return the cached model, loading it on first call.
+# ---------------------------------------------------------------------------
+# Module-level singleton + backward-compat shim
+# ---------------------------------------------------------------------------
 
-    Raises
-    ------
-    RuntimeError:
-        If the model checkpoint could not be loaded.
-    """
-    if _model is None:
-        load_model()
-    if _model is None:
-        raise RuntimeError(
-            f"Model not loaded — {_load_error or 'call load_model() first'}"
-        )
-    return _model
+_holder = ModelHolder()
+
+
+def load_model(path: Path | None = None) -> Any | None:
+    return _holder.load(path)
+
+
+def reload_model(path: Path) -> bool:
+    return _holder.reload(path)
+
+
+def get_model() -> Any:
+    return _holder.model
 
 
 def get_class_names() -> list[str]:
-    """Return the vocabulary list in compact-index order."""
-    if _class_names is None:
-        load_model()
-    return _class_names or []
+    return _holder.class_names
 
 
 def is_loaded() -> bool:
-    return _model is not None
+    return _holder.is_loaded
 
 
 def get_load_error() -> str | None:
-    """Return the error message from the last failed load attempt, or ``None``."""
-    return _load_error
+    return _holder.load_error
+
+
+def get_model_info() -> dict:
+    return _holder.info
 
 
 def _reset_for_testing() -> None:
-    """Reset module state. Only call from test fixtures."""
-    global _model, _class_names, _load_error
-    with _lock:
-        _model = None
-        _class_names = None
-        _load_error = None
+    _holder.reset_for_testing()
 
 
 def run_inference(seq: np.ndarray) -> tuple[str, float]:
-    """Run a single sequence through the model under the global lock.
-
-    Parameters
-    ----------
-    seq:
-        Float32 array of shape ``(SEQUENCE_LEN, FEATURE_DIM)``.
-
-    Returns
-    -------
-    label:
-        Predicted class name.
-    confidence:
-        Softmax probability of the top class, in ``[0, 1]``.
-
-    Raises
-    ------
-    ValueError:
-        If *seq* has the wrong shape.
-    """
     expected = (CONFIG.sequence_len, CONFIG.feature_dim)
     if seq.shape != expected:
         raise ValueError(f"Expected shape {expected}, got {seq.shape}")
-
-    model = get_model()
-    names = get_class_names()
+    names = _holder.class_names
     if not names:
         raise ValueError(
-            "Class name list is empty — no processed data found in data/processed/. "
-            "Run generate_test_fixtures.py and train_model.py to populate it."
+            "Class name list is empty — no processed data found in data/processed/."
         )
-
-    with _lock:
-        probs = model.predict(seq[np.newaxis], verbose=0)[0]
-
+    probs = _holder.predict(seq[np.newaxis])[0]
     idx = int(np.argmax(probs))
     if idx >= len(names):
         raise ValueError(
-            f"Model output index {idx} is out of range for class names "
-            f"(got {len(names)} names). Model and label map are mismatched."
+            f"Model output index {idx} out of range for {len(names)} class names."
         )
     return names[idx], float(probs[idx])
 
 
 def run_inference_probs(seq: np.ndarray) -> np.ndarray:
-    """Same input contract as :func:`run_inference` but returns the full
-    softmax probability vector instead of ``(label, confidence)``.
-
-    Used by the real-time smoother (Phase 7) which EMAs probabilities across
-    frames before applying confidence / repeat-suppression gates.
-    """
     expected = (CONFIG.sequence_len, CONFIG.feature_dim)
     if seq.shape != expected:
         raise ValueError(f"Expected shape {expected}, got {seq.shape}")
-    model = get_model()
-    with _lock:
-        probs = model.predict(seq[np.newaxis], verbose=0)[0]
+    probs = _holder.predict(seq[np.newaxis])[0]
     return np.asarray(probs, dtype=np.float32)

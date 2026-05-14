@@ -28,6 +28,7 @@ from flask import request
 from flask_socketio import SocketIO, emit, join_room as sio_join_room, leave_room as sio_leave_room
 
 from backend.api import storage
+from backend.api.errors import LandmarkValidationError, ModelNotReadyError, SignLearnError
 from backend.api.inference import FrameBuffer
 from backend.api.rooms import STORE
 
@@ -134,7 +135,16 @@ def register(socketio: SocketIO) -> None:
 
         try:
             result = buf.push(data["landmarks"])
-        except RuntimeError:
+        except ModelNotReadyError as exc:
+            emit("prediction", {
+                "label": None, "confidence": None, "ready": False,
+                "error": exc.error_code,
+            })
+            return
+        except (LandmarkValidationError, SignLearnError) as exc:
+            emit("error", {"message": exc.message, "code": exc.error_code})
+            return
+        except RuntimeError as exc:
             emit("prediction", {
                 "label": None, "confidence": None, "ready": False,
                 "error": "model_not_loaded",
