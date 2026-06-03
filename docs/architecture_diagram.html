@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignLearn — Architecture Diagram</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a14;
+      color: #f0f0f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+    h1 {
+      font-size: 1.6rem;
+      color: #00e5ff;
+      margin-bottom: 0.4rem;
+      letter-spacing: 0.02em;
+    }
+    p.sub {
+      color: #a8a8b8;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    .diagram-wrap {
+      background: #15151f;
+      border: 1px solid #2a2a3e;
+      border-radius: 14px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 1400px;
+      overflow-x: auto;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+    }
+    .mermaid { display: flex; justify-content: center; }
+    .legend {
+      margin-top: 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 0.75rem;
+      width: 100%;
+      max-width: 1400px;
+    }
+    .leg-card {
+      background: #15151f;
+      border: 1px solid #2a2a3e;
+      border-radius: 10px;
+      padding: 0.9rem 1.1rem;
+    }
+    .leg-card h3 { font-size: 0.82rem; color: #00e5ff; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.5rem; }
+    .leg-card table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+    .leg-card td { padding: 0.2rem 0.4rem; color: #a8a8b8; }
+    .leg-card td:first-child { color: #f0f0f5; font-weight: 600; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <h1>◐◑ SignLearn — Complete Architecture</h1>
+  <p class="sub">Real-time ASL recognition system · TCN ONNX · 97.84% accuracy · 0.23 ms p95</p>
+
+  <div class="diagram-wrap">
+    <div class="mermaid">
+flowchart TB
+    subgraph BROWSER["  Browser  (Next.js 15 · App Router)  "]
+        direction LR
+        subgraph INPUT["Input"]
+            CAM["Webcam"]
+            MIC["Microphone"]
+        end
+        subgraph MP_BOX["Hand Tracking"]
+            MP["MediaPipe Hands\nGPU delegate\n21 landmarks × 2 hands × 3 coords\n= 126 floats / frame"]
+        end
+        subgraph STT_BOX["Speech"]
+            STT["Web Speech API\nbrowser-native transcription"]
+        end
+        subgraph UI_BOX["React UI Components"]
+            SV["SignerView\ncamera + overlay + controls"]
+            HV["HearingView\nmic + push-to-talk"]
+            CM["ConfidenceMeter\nglow on commit"]
+            CP["CaptionsPanel"]
+            LO["LandmarkOverlay\nmirrored canvas"]
+            LOG["ConversationLog\nexport txt · md · csv"]
+        end
+        CAM --> MP --> SV
+        MIC --> STT --> HV
+        SV --> CM
+        SV --> LO
+        CP --> LOG
+    end
+
+    subgraph WS["  WebSocket  (Socket.IO)  "]
+        direction LR
+        WF["frame\n{landmarks: float32[126], t: ms}"]
+        WP["prediction\n{label, confidence, ready}"]
+        WSP["speech  {text}"]
+        WR["reset"]
+    end
+
+    subgraph BACKEND["  Backend  (Flask + Socket.IO · :5001)  "]
+        direction TB
+        SH["socket_handlers.py\n1 FrameBuffer per session · idle TTL 5 min"]
+        FB["FrameBuffer\n30-frame sliding window · stride 1"]
+        NRM["normalize_frame\nwrist at origin · unit-scale per hand"]
+        ML["ModelLoader\nONNX Runtime · atomic RLock hot-swap\nsha256 verify on reload"]
+        SMO["PredictionSmoother\nEMA α=0.6 · threshold 0.75\ncooldown 15 frames"]
+        ERR["Error handlers\n422 landmark · 503 model\n401 admin auth"]
+        subgraph RESTAPI["REST API"]
+            HLT["/health\nsha256 · uptime · backend type"]
+            MET["/metrics  Prometheus"]
+            ADM["/admin/reload  X-Admin-Token"]
+            TRX["/transcript"]
+            FBK["/feedback · /corrections"]
+        end
+        DB[("SQLite\nsignlearn.sqlite\ntranscript · feedback")]
+    end
+
+    subgraph ONNX["  TCN ONNX Model  "]
+        direction TB
+        IN2["Input  (30 × 126)"]
+        PROJ["Conv1D k=1  projection → 64"]
+        R1["Residual block  dilation=1\nConv1D×2 · LayerNorm · ReLU · Dropout 0.4"]
+        R2["Residual block  dilation=2"]
+        R4["Residual block  dilation=4"]
+        R8["Residual block  dilation=8"]
+        GAP["GlobalAveragePooling1D"]
+        DN["Dense 128 · ReLU · Dropout\nDense 36 · Softmax"]
+        PERF["126 372 params\n97.84% test acc · 95.5% F1\np95 = 0.23 ms · 4 889 fps"]
+        IN2 --> PROJ --> R1 --> R2 --> R4 --> R8 --> GAP --> DN --> PERF
+    end
+
+    subgraph TRAINING["  ML Training Pipeline  "]
+        direction LR
+        KAG["Kaggle ASL\nAlphabet + Digits"]
+        EXT["extract_landmarks.py\nMediaPipe → (30,126) .npy"]
+        PRO["66 666 sequences\n36 classes · train/val/test"]
+        AUG["augment.py\nrotate · scale · translate\nnoise · rotate3d · speed_warp"]
+        FEAT["features.py\nraw (126) · raw+velocity (252)\nengineered (398)"]
+        SW["sweep.py  16 runs\n4 arch × 2 feat × 2 lr · 100 epochs"]
+        EVAL["evaluate_model.py\ntest acc · F1 · confusion matrix"]
+        EXP["export_onnx.py\ntf2onnx opset 17\nparity check Δ < 1e-4"]
+        CKP["tcn_best.onnx\nartifacts/checkpoints/"]
+        KAG --> EXT --> PRO --> AUG --> FEAT --> SW --> EVAL --> EXP --> CKP
+    end
+
+    SV -->|"emit frame"| WF
+    HV -->|"emit speech"| WSP
+    WF --> SH
+    WSP --> SH
+    WR --> SH
+    SH --> FB --> NRM --> ML
+    ML <-->|"(30,126) → float32[36]"| IN2
+    ML --> SMO --> WP
+    WP -->|"prediction event"| CM
+    WP -->|"caption"| CP
+    SH --> DB
+    DB --> TRX
+    CKP -->|"load at startup"| ML
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="leg-card">
+      <h3>Dataset</h3>
+      <table>
+        <tr><td>Source</td><td>Kaggle ASL Alphabet + Digits</td></tr>
+        <tr><td>Sequences</td><td>66,666 total</td></tr>
+        <tr><td>Classes</td><td>36 (a–z + zero–nine)</td></tr>
+        <tr><td>Shape</td><td>(30, 126) float32</td></tr>
+        <tr><td>Splits</td><td>43 K train · 11.6 K val · 11.4 K test</td></tr>
+      </table>
+    </div>
+    <div class="leg-card">
+      <h3>Model — TCN</h3>
+      <table>
+        <tr><td>Architecture</td><td>Dilated Temporal CNN</td></tr>
+        <tr><td>Parameters</td><td>126,372</td></tr>
+        <tr><td>Test accuracy</td><td>97.84%</td></tr>
+        <tr><td>Macro F1</td><td>95.45%</td></tr>
+        <tr><td>Inference p95</td><td>0.23 ms (ONNX)</td></tr>
+        <tr><td>Throughput</td><td>4,889 fps on CPU</td></tr>
+      </table>
+    </div>
+    <div class="leg-card">
+      <h3>Backend</h3>
+      <table>
+        <tr><td>Framework</td><td>Flask + Flask-SocketIO</td></tr>
+        <tr><td>Port</td><td>5001</td></tr>
+        <tr><td>Runtime</td><td>ONNX Runtime (CPU)</td></tr>
+        <tr><td>Window</td><td>30 frames, stride 1</td></tr>
+        <tr><td>Smoother</td><td>EMA α=0.6, conf ≥ 0.75</td></tr>
+        <tr><td>Storage</td><td>SQLite</td></tr>
+      </table>
+    </div>
+    <div class="leg-card">
+      <h3>Frontend</h3>
+      <table>
+        <tr><td>Framework</td><td>Next.js 15 App Router</td></tr>
+        <tr><td>Hand tracking</td><td>MediaPipe Hands (in-browser)</td></tr>
+        <tr><td>Transport</td><td>Socket.IO WebSocket</td></tr>
+        <tr><td>Speech</td><td>Web Speech API</td></tr>
+        <tr><td>Privacy</td><td>Video never leaves browser</td></tr>
+      </table>
+    </div>
+    <div class="leg-card">
+      <h3>Known Limitations</h3>
+      <table>
+        <tr><td>two ↔ v</td><td>Same ASL handshape</td></tr>
+        <tr><td>six ↔ w</td><td>Same ASL handshape</td></tr>
+        <tr><td>k/v, r/u</td><td>Residual (6 samples each)</td></tr>
+        <tr><td>Vocab</td><td>36/93 classes trained</td></tr>
+      </table>
+    </div>
+    <div class="leg-card">
+      <h3>Sweep Results (Top 3)</h3>
+      <table>
+        <tr><td>TCN raw 5e-4</td><td>97.84% ← winner</td></tr>
+        <tr><td>TCN raw 1e-3</td><td>97.49%</td></tr>
+        <tr><td>CNN-BiLSTM rv 5e-4</td><td>96.80%</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#1a1a2e',
+        primaryTextColor: '#f0f0f5',
+        primaryBorderColor: '#2a2a3e',
+        lineColor: '#00e5ff',
+        secondaryColor: '#15151f',
+        tertiaryColor: '#0e0e1a',
+        background: '#0a0a14',
+        mainBkg: '#1a1a2e',
+        nodeBorder: '#2a2a3e',
+        clusterBkg: '#0e0e1a',
+        titleColor: '#00e5ff',
+        edgeLabelBackground: '#15151f',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      },
+      flowchart: { curve: 'basis', padding: 20 },
+    });
+  </script>
+</body>
+</html>

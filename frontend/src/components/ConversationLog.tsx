@@ -143,6 +143,7 @@ export function ConversationLog({ entries, roomId }: ConversationLogProps) {
                 <button
                   key={fmt}
                   role="menuitem"
+                  className="sl-menu-item"
                   onClick={() => doExport(fmt)}
                   style={menuStyles.item}
                 >

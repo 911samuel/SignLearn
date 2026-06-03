@@ -219,6 +219,7 @@ def record_session(
     target: int,
     countdown_secs: int = 3,
     diversity_matrix: bool = False,
+    seq_len: int = SEQUENCE_LEN,
 ) -> dict[str, int]:
     """Run the interactive recording session. Returns {word: n_recorded}."""
     split = _SIGNER_SPLIT.get(signer, "train")
@@ -323,8 +324,8 @@ def record_session(
 
                 elif state == "recording":
                     frames.append(frame_data)
-                    if len(frames) >= SEQUENCE_LEN:
-                        seq = np.stack(frames[:SEQUENCE_LEN], axis=0).astype(np.float32)
+                    if len(frames) >= seq_len:
+                        seq = np.stack(frames[:seq_len], axis=0).astype(np.float32)
                         sample_id = _next_sample_id(split_dir, label)
                         stem = f"{label}_s{signer:02d}_{sample_id:04d}"
                         out_path = split_dir / f"{stem}.npy"
@@ -421,7 +422,13 @@ def _parse_args(argv=None):
     p.add_argument(
         "--out", type=Path,
         default=_REPO_ROOT / "data" / "processed",
-        help="Processed data root (default: data/processed)",
+        help="Processed data root (default: data/processed). For word recordings "
+             "use data/processed/words to match the WLASL extractor output.",
+    )
+    p.add_argument(
+        "--seq-len", type=int, default=SEQUENCE_LEN,
+        help=f"Frames per recorded sequence (default: {SEQUENCE_LEN} for letters; "
+             f"use 80 for words to match WLASL extraction).",
     )
     p.add_argument(
         "--resume", action="store_true",
@@ -455,6 +462,7 @@ if __name__ == "__main__":
         target=args.target,
         diversity_matrix=args.diversity_matrix,
         countdown_secs=args.countdown,
+        seq_len=args.seq_len,
     )
 
     print("\n--- Session summary ---")

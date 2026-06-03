@@ -96,7 +96,7 @@ serve:
 	$(PYTHON) backend/scripts/run_server.py
 
 ## Start the backend serving a specific ONNX checkpoint (usage: make serve-onnx MODEL=path/to/model.onnx)
-MODEL ?= artifacts/runs/bilstm-v2-36cls/bilstm_best.onnx
+MODEL ?= artifacts/checkpoints/tcn_best.onnx
 serve-onnx:
 	SIGNLEARN_MODEL_PATH=$(MODEL) $(PYTHON) backend/scripts/run_server.py
 

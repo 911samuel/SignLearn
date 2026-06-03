@@ -23,6 +23,14 @@ export default function JoinPage() {
   const [name, setName] = useState(prefs.name);
   const [role, setRole] = useState<Role | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  // Start with just the path so SSR and client render the same value.
+  // useEffect updates to the full origin URL after hydration.
+  const [joinUrl, setJoinUrl] = useState(`/r/${roomId}/join`);
+
+  useEffect(() => {
+    setJoinUrl(`${window.location.origin}/r/${roomId}/join`);
+  }, [roomId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,9 +78,12 @@ export default function JoinPage() {
       ? "Your microphone will be used for speech-to-text captions. Audio is not recorded."
       : null;
 
-  const joinUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/r/${roomId}/join`
-    : `/r/${roomId}/join`;
+  function copyJoinUrl() {
+    navigator.clipboard?.writeText(joinUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
 
   return (
     <div style={styles.shell}>
@@ -91,11 +102,17 @@ export default function JoinPage() {
           <code style={styles.url}>{joinUrl}</code>
           <button
             type="button"
-            style={styles.copyBtn}
-            onClick={() => navigator.clipboard?.writeText(joinUrl)}
-            aria-label="Copy join link"
+            className="sl-btn"
+            style={{
+              ...styles.copyBtn,
+              color: copied ? "var(--success)" : "var(--text-muted)",
+              transition: "color 200ms ease",
+            }}
+            onClick={copyJoinUrl}
+            aria-label={copied ? "Link copied!" : "Copy join link"}
+            aria-live="polite"
           >
-            Copy
+            {copied ? "Copied ✓" : "Copy"}
           </button>
         </div>
 
@@ -153,7 +170,7 @@ export default function JoinPage() {
           </div>
         </div>
 
-        <button type="submit" disabled={!canSubmit} style={styles.primary}>
+        <button type="submit" className="sl-btn-primary" disabled={!canSubmit} style={styles.primary}>
           Enter room
         </button>
 

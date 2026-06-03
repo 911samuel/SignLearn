@@ -80,6 +80,7 @@ export function FeedbackWidget({ roomId }: FeedbackWidgetProps) {
                 <button
                   key={c.value}
                   type="button"
+                  className="sl-btn"
                   onClick={() => setCategory(c.value)}
                   style={{
                     ...styles.chip,
@@ -110,6 +111,7 @@ export function FeedbackWidget({ roomId }: FeedbackWidgetProps) {
 
             <button
               type="submit"
+              className="sl-btn-primary"
               disabled={busy || !text.trim()}
               style={styles.submit}
             >

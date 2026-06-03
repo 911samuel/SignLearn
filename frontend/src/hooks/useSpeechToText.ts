@@ -14,24 +14,30 @@ export interface SpeechEntry {
 export function useSpeechToText(onResult?: (text: string, ts: number) => void) {
   const [transcript, setTranscript] = useState<SpeechEntry[]>([]);
   const [listening, setListening] = useState(false);
-  const [supported] = useState(
-    () =>
+  const [supported, setSupported] = useState(false);
+
+  useEffect(() => {
+    setSupported(
       typeof window !== "undefined" &&
-      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
-  );
+        ("SpeechRecognition" in window || "webkitSpeechRecognition" in window),
+    );
+  }, []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recogRef = useRef<any>(null);
   const idRef = useRef(0);
   const onResultRef = useRef(onResult);
-  useEffect(() => { onResultRef.current = onResult; }, [onResult]);
+  useEffect(() => {
+    onResultRef.current = onResult;
+  }, [onResult]);
 
   const start = useCallback(() => {
     if (!supported || listening) return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR: new () => any =
-      (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+      (window as any).SpeechRecognition ??
+      (window as any).webkitSpeechRecognition;
 
     const recog = new SR();
     recog.continuous = true;
@@ -44,7 +50,10 @@ export function useSpeechToText(onResult?: (text: string, ts: number) => void) {
           const text = e.results[i][0].transcript.trim();
           if (text) {
             const ts = Date.now();
-            setTranscript((prev) => [...prev, { id: ++idRef.current, text, ts }]);
+            setTranscript((prev) => [
+              ...prev,
+              { id: ++idRef.current, text, ts },
+            ]);
             onResultRef.current?.(text, ts);
           }
         }

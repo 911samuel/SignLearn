@@ -40,6 +40,7 @@ export function LandingCTA() {
       <div style={styles.ctaRow}>
         <button
           type="button"
+          className="sl-btn-primary"
           onClick={createRoom}
           disabled={busy}
           style={styles.primary}
@@ -48,6 +49,7 @@ export function LandingCTA() {
         </button>
         <button
           type="button"
+          className="sl-btn"
           onClick={() => setShowJoin((v) => !v)}
           style={styles.secondary}
           aria-expanded={showJoin}

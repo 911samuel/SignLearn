@@ -69,6 +69,7 @@ export function PermissionGate({ kind, onAllow, secondaryAction }: PermissionGat
         <div style={styles.actions}>
           <button
             type="button"
+            className="sl-btn-primary"
             onClick={handleAllow}
             disabled={requesting}
             style={styles.primary}
@@ -78,6 +79,7 @@ export function PermissionGate({ kind, onAllow, secondaryAction }: PermissionGat
           {secondaryAction && (
             <button
               type="button"
+              className="sl-btn"
               onClick={secondaryAction.onClick}
               style={styles.secondary}
             >

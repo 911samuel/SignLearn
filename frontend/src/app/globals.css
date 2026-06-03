@@ -98,6 +98,39 @@ a:hover { color: var(--accent-strong); }
   to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
 
+/* ── Sign commit flash ──────────────────────────────────────────────── */
+@keyframes sl-commit-flash {
+  0%   { text-shadow: 0 0 0px var(--accent); }
+  30%  { text-shadow: 0 0 18px var(--accent), 0 0 6px var(--accent); }
+  100% { text-shadow: 0 0 0px var(--accent); }
+}
+.sl-commit-flash {
+  animation: sl-commit-flash 600ms ease-out forwards;
+}
+
+/* ── Practice chip pop-in ───────────────────────────────────────────── */
+@keyframes sl-chip-pop {
+  0%   { opacity: 0; transform: scale(0.75); }
+  60%  { transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.sl-chip-new {
+  animation: sl-chip-pop 220ms ease-out forwards;
+}
+
+/* ── Button hover / active utility ─────────────────────────────────── */
+.sl-btn {
+  transition: opacity 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+}
+.sl-btn:hover:not(:disabled) { opacity: 0.88; }
+.sl-btn:active:not(:disabled) { transform: scale(0.97); }
+
+.sl-btn-primary {
+  transition: filter 120ms ease, transform 80ms ease;
+}
+.sl-btn-primary:hover:not(:disabled) { filter: brightness(1.12); }
+.sl-btn-primary:active:not(:disabled) { transform: scale(0.97); }
+
 /* ── Skip nav ───────────────────────────────────────────────────────── */
 .skip-nav {
   position: fixed;
@@ -146,7 +179,15 @@ a:hover { color: var(--accent-strong); }
   cursor: pointer;
   font-weight: 600;
   font-family: inherit;
+  transition: opacity 120ms ease;
 }
+.conv-log-export:hover { opacity: 0.75; }
+
+/* Export dropdown menu items */
+.sl-menu-item {
+  transition: background 100ms ease;
+}
+.sl-menu-item:hover { background: var(--bg-elevated) !important; }
 .conv-log-empty {
   padding: 0.5rem 1rem;
   font-size: 0.82rem;

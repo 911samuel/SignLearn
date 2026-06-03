@@ -29,18 +29,24 @@ function load(): Preferences {
 }
 
 function save(p: Preferences) {
-  try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {}
+  try {
+    localStorage.setItem(KEY, JSON.stringify(p));
+  } catch {}
 }
 
-export function usePreferences(): [Preferences, (patch: Partial<Preferences>) => void] {
-  const [prefs, setPrefs] = useState<Preferences>(load);
+export function usePreferences(): [
+  Preferences,
+  (patch: Partial<Preferences>) => void,
+] {
+  const [prefs, setPrefs] = useState<Preferences>(DEFAULTS);
+
+  useEffect(() => {
+    setPrefs(load());
+  }, []);
 
   // Apply text-size to :root whenever it changes.
   useEffect(() => {
-    document.documentElement.setAttribute(
-      "data-text-size",
-      prefs.textSize,
-    );
+    document.documentElement.setAttribute("data-text-size", prefs.textSize);
   }, [prefs.textSize]);
 
   const update = useCallback((patch: Partial<Preferences>) => {

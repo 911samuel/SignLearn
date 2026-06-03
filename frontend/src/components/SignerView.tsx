@@ -65,18 +65,22 @@ export function SignerView({ socket, captions, peerPresent, roomId, onPrediction
       video: { width: VIDEO_W, height: VIDEO_H },
       audio: true,
     });
-    setLocalStream(stream);
-    setCamStatus("ok");
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      // Best effort; some browsers reject silently if not user-gesture-bound,
-      // but we ARE in a user gesture path here so this should resolve.
-      videoRef.current.play().catch(() => {});
-    }
     stream.getVideoTracks().forEach((track) => {
       track.onended = () => setCamStatus("lost");
     });
+    // Set stream first, then flip status. The useEffect below wires
+    // srcObject after React mounts the <video> element.
+    setLocalStream(stream);
+    setCamStatus("ok");
   }, []);
+
+  // Attach stream to the video element once it's in the DOM.
+  // Must be an effect — the <video> only renders after setCamStatus("ok").
+  useEffect(() => {
+    if (camStatus !== "ok" || !localStream || !videoRef.current) return;
+    videoRef.current.srcObject = localStream;
+    videoRef.current.play().catch(() => {});
+  }, [camStatus, localStream]);
 
   if (camStatus === "pending") {
     return (
@@ -158,13 +162,14 @@ export function SignerView({ socket, captions, peerPresent, roomId, onPrediction
 
         <div style={styles.controls}>
           <button
+            className="sl-btn"
             onClick={togglePaused}
             style={{ ...styles.btn, background: paused ? "var(--primary)" : "var(--bg-card)" }}
             aria-pressed={paused}
           >
             {paused ? "▶ Resume" : "⏸ Pause"}
           </button>
-          <button onClick={reset} style={styles.btn}>
+          <button className="sl-btn" onClick={reset} style={styles.btn}>
             ✋ Reset sign window
           </button>
         </div>

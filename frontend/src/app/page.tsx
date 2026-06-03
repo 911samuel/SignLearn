@@ -32,7 +32,7 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      <main id="main-content" style={styles.hero}>
+      <main id="main-content" tabIndex={-1} style={styles.hero}>
         <h1 style={styles.h1}>
           Have a real conversation.
           <br />

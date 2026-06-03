@@ -112,13 +112,13 @@ function RoomInner({ roomId, role, name, onLeave }: RoomInnerProps) {
         />
         <span style={styles.statusLabel} aria-live="polite">{statusLabel(status)}</span>
         <ThemeToggle compact />
-        <button onClick={onLeave} style={styles.leave}>Leave</button>
+        <button className="sl-btn" onClick={onLeave} style={styles.leave}>Leave</button>
       </header>
 
       {joinError && (
         <div style={styles.banner} role="alert">
           {joinError}
-          <button onClick={onLeave} style={{ ...styles.leave, marginLeft: "0.75rem" }}>Back</button>
+          <button className="sl-btn" onClick={onLeave} style={{ ...styles.leave, marginLeft: "0.75rem" }}>Back</button>
         </div>
       )}
 

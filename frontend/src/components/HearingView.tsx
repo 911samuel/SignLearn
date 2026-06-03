@@ -124,6 +124,7 @@ export function HearingView({ socket, captions, peerPresent, onSpeech }: Hearing
 
         <button
           type="button"
+          className="sl-btn-primary"
           disabled={!supported}
           onPointerDown={pressStart}
           onPointerUp={pressEnd}

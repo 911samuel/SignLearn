@@ -8,12 +8,18 @@ interface ThemeToggleProps {
 
 export function ThemeToggle({ compact }: ThemeToggleProps) {
   const [theme, toggle] = useTheme();
-  const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
-  const icon = theme === "dark" ? "☀️" : "🌙";
+  const label =
+    theme === "light"
+      ? "Switch to dark mode"
+      : theme === "dark"
+        ? "Switch to light mode"
+        : "Toggle theme";
+  const icon = theme === "light" ? "🌙" : theme === "dark" ? "☀️" : "🌓";
 
   return (
     <button
       type="button"
+      className="sl-btn"
       onClick={toggle}
       title={label}
       aria-label={label}

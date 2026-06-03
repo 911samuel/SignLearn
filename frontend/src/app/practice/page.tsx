@@ -74,7 +74,7 @@ export default function PracticePage() {
         <span style={styles.badge}>No one else can see you</span>
       </header>
 
-      <main style={styles.main}>
+      <main id="main-content" tabIndex={-1} style={styles.main}>
         <div style={styles.col}>
           <section style={styles.tile} aria-label="Your camera preview">
             {camStatus === "denied" && (
@@ -112,14 +112,15 @@ export default function PracticePage() {
 
             <div style={styles.controls}>
               <button
+                className="sl-btn"
                 onClick={togglePaused}
                 style={{ ...styles.btn, background: paused ? "var(--primary)" : "var(--bg-card)" }}
                 aria-pressed={paused}
               >
                 {paused ? "▶ Resume" : "⏸ Pause"}
               </button>
-              <button onClick={reset} style={styles.btn}>✋ Reset window</button>
-              <button onClick={() => setHistory([])} style={styles.btn}>Clear history</button>
+              <button className="sl-btn" onClick={reset} style={styles.btn}>✋ Reset window</button>
+              <button className="sl-btn" onClick={() => setHistory([])} style={styles.btn}>Clear history</button>
             </div>
           </section>
         </div>
@@ -132,7 +133,13 @@ export default function PracticePage() {
             ) : (
               <div style={styles.historyWrap} aria-live="polite">
                 {history.map((word, i) => (
-                  <span key={i} style={styles.chip}>{word}</span>
+                  <span
+                    key={i}
+                    className={i === history.length - 1 ? "sl-chip-new" : undefined}
+                    style={styles.chip}
+                  >
+                    {word}
+                  </span>
                 ))}
               </div>
             )}

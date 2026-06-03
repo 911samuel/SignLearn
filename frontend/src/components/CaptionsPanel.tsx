@@ -34,13 +34,13 @@ export function CaptionsPanel({ captions, filter = "all", emptyHint }: CaptionsP
 
 const styles: Record<string, React.CSSProperties> = {
   box: {
-    minHeight: 96, padding: "0.5rem 0.75rem", background: "#0e0e1a",
+    minHeight: 96, padding: "0.5rem 0.75rem", background: "var(--bg-card)",
     borderRadius: 8, display: "flex", flexDirection: "column", gap: "0.25rem",
   },
-  empty: { color: "#555", fontSize: "0.85rem" },
+  empty: { color: "var(--text-faint)", fontSize: "0.85rem" },
   line: { display: "flex", alignItems: "baseline", gap: "0.4rem", fontSize: "0.95rem" },
   icon: { fontSize: "0.9rem" },
-  name: { color: "#888", fontSize: "0.8rem" },
-  text: { color: "#eee" },
-  conf: { color: "#666", fontSize: "0.75rem", marginLeft: "auto" },
+  name: { color: "var(--text-muted)", fontSize: "0.8rem" },
+  text: { color: "var(--text)" },
+  conf: { color: "var(--text-faint)", fontSize: "0.75rem", marginLeft: "auto" },
 };

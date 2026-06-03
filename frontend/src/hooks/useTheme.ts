@@ -10,26 +10,32 @@ function getClientInitial(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "dark" || stored === "light") return stored;
-    if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
+    if (window.matchMedia("(prefers-color-scheme: light)").matches)
+      return "light";
   } catch {}
   return "dark";
 }
 
-export function useTheme(): [Theme, () => void] {
-  const [theme, setTheme] = useState<Theme>("dark");
+export function useTheme(): [Theme | null, () => void] {
+  const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
-    // Sync with actual stored theme on the client after hydration.
     const initial = getClientInitial();
     setTheme(initial);
     document.documentElement.setAttribute("data-theme", initial);
   }, []);
 
   useEffect(() => {
+    if (theme === null) return;
     document.documentElement.setAttribute("data-theme", theme);
-    try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch {}
   }, [theme]);
 
-  const toggle = useCallback(() => setTheme((t) => (t === "dark" ? "light" : "dark")), []);
+  const toggle = useCallback(
+    () => setTheme((t) => (t === "dark" ? "light" : "dark")),
+    [],
+  );
   return [theme, toggle];
 }

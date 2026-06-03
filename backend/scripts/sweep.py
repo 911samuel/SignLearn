@@ -176,6 +176,13 @@ def run_sweep(config_path: Path, dry_run: bool = False) -> dict:
         if dry_run:
             summary.append({"run_name": run_name, "params": params, "skipped": True})
             continue
+        # Skip runs that already completed (history.json present = training finished).
+        _history = _REPO_ROOT / "artifacts" / "runs" / run_name / "reports" / "history.json"
+        if _history.exists():
+            print(f"    ↩ Already complete — skipping.")
+            summary.append({"run_name": run_name, "params": params, "skipped": True})
+            run_names.append(run_name)  # still include in final evaluation
+            continue
         t0 = time.time()
         result = subprocess.run(
             cmd, cwd=_REPO_ROOT,
