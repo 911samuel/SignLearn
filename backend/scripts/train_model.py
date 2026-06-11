@@ -256,6 +256,8 @@ def _parse_args(argv=None):
     p.add_argument("--batch-size",   type=int,  default=None)
     p.add_argument("--lr",           type=float,default=None)
     p.add_argument("--dropout",      type=float,default=None)
+    p.add_argument("--seed",         type=int,  default=None,
+                   help="Override TrainConfig.seed for reproducibility runs.")
     p.add_argument("--data-dir",     type=Path, default=PROCESSED_DIR)
     p.add_argument("--out-dir",      type=Path, default=ARTIFACTS_DIR)
     return p.parse_args(argv)
@@ -278,5 +280,7 @@ if __name__ == "__main__":
         config.learning_rate = args.lr
     if args.dropout is not None:
         config.dropout = args.dropout
+    if args.seed is not None:
+        config.seed = args.seed
 
     train(config, data_dir=args.data_dir, out_dir=args.out_dir, run_name=args.run_name)

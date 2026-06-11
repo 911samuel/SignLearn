@@ -1,199 +1,138 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useToast } from "@/hooks/useToast";
+import { Accessibility, Bug, Lightbulb, MessageCirclePlus, Sparkles, X } from "lucide-react";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
+import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:5001";
+const CATEGORIES = [
+  { value: "bug",            label: "Something broke",   icon: Bug },
+  { value: "praise",         label: "This helped me",    icon: Sparkles },
+  { value: "idea",           label: "Feature idea",      icon: Lightbulb },
+  { value: "accessibility",  label: "Accessibility",     icon: Accessibility },
+] as const;
 
-interface FeedbackWidgetProps {
-  roomId?: string;
-}
+type Category = (typeof CATEGORIES)[number]["value"];
 
-export function FeedbackWidget({ roomId }: FeedbackWidgetProps) {
+export function FeedbackWidget({ roomId }: { roomId?: string }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [category, setCategory] = useState<"bug" | "praise" | "idea" | "accessibility">("bug");
+  const [category, setCategory] = useState<Category>("bug");
   const [busy, setBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const toast = useToast();
-
-  function toggle() {
-    setOpen((v) => {
-      if (!v) setTimeout(() => textareaRef.current?.focus(), 60);
-      return !v;
-    });
-  }
+  const { toast } = useToast();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
     setBusy(true);
     try {
-      await fetch(`${BACKEND_URL}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, text: text.trim(), room_id: roomId ?? null }),
+      await api.feedback({ category, message: text.trim(), context: roomId });
+      toast({
+        tone: "success",
+        title: "Thanks for the feedback",
+        description: "We read every message within 48 hours.",
       });
-      toast.success("Thanks! We read every message.");
       setText("");
       setOpen(false);
     } catch {
-      toast.error("Couldn't send — please try again.");
+      toast({
+        tone: "danger",
+        title: "Couldn't send",
+        description: "Check your network and try again.",
+      });
     } finally {
       setBusy(false);
     }
   }
 
-  const categories: { value: typeof category; label: string }[] = [
-    { value: "bug", label: "🐛 Something broke" },
-    { value: "praise", label: "✨ This helped me" },
-    { value: "idea", label: "💡 Feature idea" },
-    { value: "accessibility", label: "♿ Accessibility issue" },
-  ];
-
   return (
-    <>
-      <button
-        type="button"
-        onClick={toggle}
-        style={styles.fab}
-        aria-label={open ? "Close feedback" : "Send feedback"}
-        aria-expanded={open}
-      >
-        {open ? "✕" : "💬"}
-      </button>
-
-      {open && (
-        <div
-          role="dialog"
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setTimeout(() => textareaRef.current?.focus(), 80);
+      }}
+    >
+      <DialogTrigger asChild>
+        <button
+          type="button"
           aria-label="Send feedback"
-          style={styles.panel}
+          className="fixed bottom-20 right-4 z-30 inline-flex h-12 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 text-sm font-semibold text-[var(--color-text)] shadow-[var(--shadow-overlay)] transition hover:bg-[var(--color-surface-sunken)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)] md:bottom-4"
         >
-          <div style={styles.panelHeader}>
-            <strong style={styles.panelTitle}>Send feedback</strong>
-            <p style={styles.panelSub}>We answer every message within 48&nbsp;hours.</p>
-          </div>
+          <MessageCirclePlus className="size-4" aria-hidden />
+          Feedback
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Send feedback</DialogTitle>
+          <DialogDescription>
+            Help us make SignLearn work better. We answer every message within 48 hours.
+          </DialogDescription>
+        </DialogHeader>
 
-          <form onSubmit={submit} style={styles.form}>
-            <div style={styles.chips} role="group" aria-label="Feedback category">
-              {categories.map((c) => (
+        <form onSubmit={submit} className="mt-5 space-y-4">
+          <fieldset>
+            <legend className="text-sm font-semibold text-[var(--color-text)] mb-2">Category</legend>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map(({ value, label, icon: Icon }) => (
                 <button
-                  key={c.value}
+                  key={value}
                   type="button"
-                  className="sl-btn"
-                  onClick={() => setCategory(c.value)}
-                  style={{
-                    ...styles.chip,
-                    background: category === c.value ? "var(--primary)" : "var(--bg-input)",
-                    color: category === c.value ? "#fff" : "var(--text-muted)",
-                    borderColor: category === c.value ? "var(--primary)" : "var(--border)",
-                  }}
-                  aria-pressed={category === c.value}
+                  onClick={() => setCategory(value)}
+                  aria-pressed={category === value}
+                  className={cn(
+                    "inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)]",
+                    category === value
+                      ? "border-transparent bg-[var(--color-brand)] text-[var(--color-brand-foreground)]"
+                      : "border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+                  )}
                 >
-                  {c.label}
+                  <Icon className="size-4" aria-hidden />
+                  {label}
                 </button>
               ))}
             </div>
+          </fieldset>
 
-            <label htmlFor="sl-feedback-text" style={styles.label}>
-              What's on your mind?
-            </label>
-            <textarea
+          <div className="space-y-1.5">
+            <Label htmlFor="sl-feedback-text">What's on your mind?</Label>
+            <Textarea
               id="sl-feedback-text"
               ref={textareaRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Tell us what happened, what you expected, or what would help…"
-              rows={4}
-              style={styles.textarea}
+              rows={5}
               required
             />
+          </div>
 
-            <button
-              type="submit"
-              className="sl-btn-primary"
-              disabled={busy || !text.trim()}
-              style={styles.submit}
-            >
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost" type="button">Cancel</Button>
+            </DialogClose>
+            <Button type="submit" disabled={busy || !text.trim()}>
               {busy ? "Sending…" : "Send feedback"}
-            </button>
-          </form>
-        </div>
-      )}
-    </>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  fab: {
-    position: "fixed",
-    bottom: "1.25rem",
-    right: "1.25rem",
-    width: 52,
-    height: 52,
-    borderRadius: "50%",
-    border: "none",
-    background: "var(--bg-elevated)",
-    boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-    cursor: "pointer",
-    fontSize: "1.35rem",
-    display: "grid",
-    placeItems: "center",
-    zIndex: 900,
-    color: "var(--text)",
-    borderColor: "var(--border)",
-    outline: "1px solid var(--border)",
-  },
-  panel: {
-    position: "fixed",
-    bottom: "5rem",
-    right: "1.25rem",
-    width: "min(340px, calc(100vw - 2.5rem))",
-    background: "var(--bg-card)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius-lg)",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-    zIndex: 900,
-    overflow: "hidden",
-  },
-  panelHeader: {
-    padding: "1rem 1rem 0.5rem",
-    borderBottom: "1px solid var(--border)",
-  },
-  panelTitle: { fontSize: "1rem" },
-  panelSub: { margin: "0.25rem 0 0", fontSize: "0.8rem", color: "var(--text-muted)" },
-  form: { padding: "0.85rem 1rem 1rem", display: "flex", flexDirection: "column", gap: "0.6rem" },
-  chips: { display: "flex", flexWrap: "wrap", gap: "0.4rem" },
-  chip: {
-    padding: "0.3rem 0.6rem",
-    borderRadius: 999,
-    border: "1px solid",
-    fontSize: "0.78rem",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    transition: "background 120ms, color 120ms",
-  },
-  label: { fontSize: "0.85rem", color: "var(--text-muted)" },
-  textarea: {
-    padding: "0.6rem 0.75rem",
-    borderRadius: "var(--radius)",
-    border: "1px solid var(--border)",
-    background: "var(--bg-input)",
-    color: "var(--text)",
-    fontSize: "0.9rem",
-    fontFamily: "inherit",
-    resize: "vertical",
-    minHeight: 90,
-  },
-  submit: {
-    padding: "0.7rem 1rem",
-    borderRadius: "var(--radius)",
-    border: "none",
-    background: "var(--primary)",
-    color: "#fff",
-    fontWeight: 600,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    fontSize: "0.95rem",
-  },
-};

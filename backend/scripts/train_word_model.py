@@ -52,23 +52,30 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def load_label_map(curated_path: Path) -> dict[str, int]:
+    # Normalise glosses to lowercase — filenames are lowercased by the
+    # ASL Citizen extractor, while curated word lists may use uppercase.
     glosses = sorted({
-        w.strip() for w in curated_path.read_text().splitlines()
+        w.strip().lower() for w in curated_path.read_text().splitlines()
         if w.strip() and not w.startswith("#")
     })
     return {g: i for i, g in enumerate(glosses)}
 
 
 def _gloss_from_filename(path: Path) -> str:
-    """``hello_s05_0001.npy`` → ``hello``;  ``thank_you_syt0a3f_0002.npy`` → ``thank_you``."""
-    stem = path.stem
-    # Strip the trailing _<idx>_<sample> = 2 trailing tokens after gloss.
+    """Recover the gloss from a SignLearn .npy filename.
+
+    Naming convention: ``<gloss>_<signer_token>_<idx>.npy`` where the signer
+    token starts with 's' (e.g. ``s05`` for WLASL, ``syt0a3f`` for YouTube,
+    ``sacABC123`` for ASL Citizen) and idx is a 4-digit zero-padded integer.
+    The gloss itself may contain underscores (e.g. ``thank_you``).
+    """
+    stem = path.stem.lower()
     parts = stem.split("_")
-    # Identify where the signer token begins (starts with 's', followed by digits or 'yt').
-    for i, p in enumerate(parts):
-        if p.startswith("s") and len(p) > 1 and (p[1:].isdigit() or p.startswith("syt")):
-            return "_".join(parts[:i])
-    # Fallback: drop the last 2 tokens.
+    # Strict pattern: last token is 4-digit idx; second-to-last starts with 's'
+    if (len(parts) >= 3 and parts[-1].isdigit()
+            and parts[-2].startswith("s") and len(parts[-2]) > 1):
+        return "_".join(parts[:-2])
+    # Fallback: drop the last 2 tokens
     return "_".join(parts[:-2]) if len(parts) >= 3 else stem
 
 
@@ -78,7 +85,7 @@ def list_split(split: str, label_map: dict[str, int], seq_len: int) -> list[tupl
     skipped_unknown = 0
     skipped_shape = 0
     for npy in split_dir.glob("*.npy"):
-        gloss = _gloss_from_filename(npy)
+        gloss = _gloss_from_filename(npy).lower()
         if gloss not in label_map:
             skipped_unknown += 1
             continue
@@ -124,7 +131,9 @@ def build_dataset(
 # ---------------------------------------------------------------------------
 
 def train(args) -> None:
-    label_map = load_label_map(CURATED_PATH)
+    words_path = Path(args.words_file) if args.words_file else CURATED_PATH
+    print(f"Using vocabulary: {words_path}")
+    label_map = load_label_map(words_path)
     n_classes = len(label_map)
     log.info("Classes: %d", n_classes)
 
@@ -250,6 +259,9 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--arch", default="bilstm",
                    help="Architecture: lstm, bilstm, transformer, tcn, cnn_bilstm, conformer_lite")
+    p.add_argument("--words-file", default=None,
+                   help="Path to a newline-delimited gloss list. "
+                        f"Default: {CURATED_PATH.relative_to(REPO_ROOT)}")
     p.add_argument("--run-name", default=f"word-bilstm-{int(time.time())}")
     p.add_argument("--seq-len", type=int, default=80)
     p.add_argument("--batch-size", type=int, default=16)

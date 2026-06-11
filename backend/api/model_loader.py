@@ -243,3 +243,114 @@ def run_inference_probs(seq: np.ndarray) -> np.ndarray:
         raise ValueError(f"Expected shape {expected}, got {seq.shape}")
     probs = _holder.predict(seq[np.newaxis])[0]
     return np.asarray(probs, dtype=np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Word model (separate holder — 80-frame sequences, 17-class conversational vocab)
+# ---------------------------------------------------------------------------
+
+WORD_SEQ_LEN = 80
+_WORD_MODEL_PATH = _REPO_ROOT_GUESS = Path(__file__).resolve().parents[2] / "artifacts" / "checkpoints" / "tcn_word_best.onnx"
+_WORD_VOCAB_PATH = Path(__file__).resolve().parents[2] / "configs" / "asl_citizen_demo_words_curated.txt"
+
+
+def _load_word_class_names() -> list[str]:
+    """Load the curated word vocabulary in the same sorted-lowercase order
+    the trainer used (see backend.scripts.train_word_model.load_label_map).
+    """
+    if not _WORD_VOCAB_PATH.exists():
+        return []
+    raw = [w.strip().lower() for w in _WORD_VOCAB_PATH.read_text().splitlines()
+           if w.strip() and not w.strip().startswith("#")]
+    return sorted(set(raw))
+
+
+class _WordHolder:
+    """Lighter-weight holder for the word model.
+
+    Same ONNX-runner backend as the letter model but with its own (80, 126)
+    input shape and 17-class output, plus class names sourced from the
+    curated vocabulary file rather than the letter label map.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._model: Any = None
+        self._class_names: list[str] = []
+        self._path: Path | None = None
+        self._sha256: str | None = None
+        self._load_error: str | None = None
+
+    def load(self, path: Path | None = None) -> Any | None:
+        with self._lock:
+            target = Path(path) if path else _WORD_MODEL_PATH
+            if self._model is not None and self._path == target:
+                return self._model
+            try:
+                from backend.api.onnx_runner import OnnxRunner
+                self._model = OnnxRunner(target)
+                self._class_names = _load_word_class_names()
+                self._path = target
+                self._sha256 = _sha256_file(target)
+                self._load_error = None
+                _log.info(
+                    "Word model loaded: %s n_classes=%d sha=%s",
+                    target, len(self._class_names), self._sha256[:12],
+                )
+                return self._model
+            except Exception as exc:  # noqa: BLE001
+                self._load_error = f"{type(exc).__name__}: {exc}"
+                _log.error("Failed to load word model %s: %s", target, exc)
+                return None
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._model is not None
+
+    @property
+    def class_names(self) -> list[str]:
+        if not self._class_names:
+            self.load()
+        return self._class_names
+
+    @property
+    def info(self) -> dict:
+        return {
+            "loaded": self.is_loaded,
+            "path": str(self._path) if self._path else None,
+            "sha256": self._sha256,
+            "n_classes": len(self._class_names),
+            "load_error": self._load_error,
+        }
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        with self._lock:
+            if self._model is None:
+                self.load()
+            if self._model is None:
+                raise RuntimeError(f"Word model not loaded — {self._load_error}")
+            return self._model.predict(x, verbose=0)
+
+
+_word_holder = _WordHolder()
+
+
+def run_word_inference_probs(seq: np.ndarray) -> np.ndarray:
+    """Run the word model on a single (80, 126) landmark sequence."""
+    expected = (WORD_SEQ_LEN, CONFIG.feature_dim)
+    if seq.shape != expected:
+        raise ValueError(f"Expected shape {expected}, got {seq.shape}")
+    probs = _word_holder.predict(seq[np.newaxis])[0]
+    return np.asarray(probs, dtype=np.float32)
+
+
+def get_word_class_names() -> list[str]:
+    return _word_holder.class_names
+
+
+def get_word_model_info() -> dict:
+    return _word_holder.info
+
+
+def is_word_model_loaded() -> bool:
+    return _word_holder.is_loaded

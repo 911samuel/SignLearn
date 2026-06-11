@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:5001";
+import { ArrowRight, Hand, Lock, MessageSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Alert } from "@/components/ui/alert";
+import { BACKEND_URL } from "@/lib/api";
 
 export function LandingCTA() {
   const router = useRouter();
@@ -18,11 +20,15 @@ export function LandingCTA() {
     setError(null);
     try {
       const res = await fetch(`${BACKEND_URL}/rooms`, { method: "POST" });
-      if (!res.ok) throw new Error("Could not reach server");
+      if (!res.ok) throw new Error("Could not reach the SignLearn server.");
       const { room_id } = await res.json();
       router.push(`/r/${room_id}/join`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create room");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to create room — check your connection and try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -36,110 +42,64 @@ export function LandingCTA() {
   }
 
   return (
-    <div style={styles.wrap}>
-      <div style={styles.ctaRow}>
-        <button
-          type="button"
-          className="sl-btn-primary"
-          onClick={createRoom}
-          disabled={busy}
-          style={styles.primary}
-        >
-          {busy ? "Creating room…" : "Start a conversation"}
-        </button>
-        <button
-          type="button"
-          className="sl-btn"
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="xl" onClick={createRoom} disabled={busy}>
+          {busy ? (
+            <>
+              <Hand className="sl-pulse-soft" aria-hidden /> Creating room…
+            </>
+          ) : (
+            <>
+              <MessageSquare aria-hidden /> Start a conversation
+              <ArrowRight className="ml-1 size-4" aria-hidden />
+            </>
+          )}
+        </Button>
+        <Button
+          size="xl"
+          variant="secondary"
           onClick={() => setShowJoin((v) => !v)}
-          style={styles.secondary}
           aria-expanded={showJoin}
+          aria-controls="join-room-form"
         >
           Join with a code
-        </button>
+        </Button>
       </div>
 
       {showJoin && (
-        <form onSubmit={joinRoom} style={styles.joinForm}>
-          <label htmlFor="room-code" className="sr-only">
-            Room code
-          </label>
-          <input
+        <form id="join-room-form" onSubmit={joinRoom} className="flex max-w-sm flex-wrap gap-2 sl-fade-up">
+          <label htmlFor="room-code" className="sr-only">Room code</label>
+          <Input
             id="room-code"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="ABC123"
             maxLength={6}
             autoComplete="off"
-            style={styles.input}
+            className="flex-1 min-w-0 font-mono tracking-[0.2em] uppercase text-lg"
+            aria-describedby="room-code-help"
           />
-          <button
-            type="submit"
-            disabled={code.trim().length === 0}
-            style={styles.joinBtn}
-          >
-            Join →
-          </button>
+          <Button type="submit" disabled={code.trim().length === 0}>
+            Join
+            <ArrowRight className="size-4" aria-hidden />
+          </Button>
+          <p id="room-code-help" className="basis-full text-xs text-[var(--color-text-muted)]">
+            Got a 6-character code from someone? Enter it here to join their room.
+          </p>
         </form>
       )}
 
       {error && (
-        <p style={styles.error} role="alert">
+        <Alert tone="danger" title="Couldn't start a room">
           {error}
-        </p>
+        </Alert>
       )}
+
+      <p className="inline-flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+        <Lock className="size-3.5" aria-hidden />
+        No sign-up required. Your video stays on your device.
+      </p>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  wrap: { display: "flex", flexDirection: "column", gap: "0.75rem" },
-  ctaRow: { display: "flex", flexWrap: "wrap", gap: "0.75rem" },
-  primary: {
-    padding: "0.95rem 1.5rem",
-    borderRadius: "var(--radius)",
-    border: "none",
-    background: "var(--accent)",
-    color: "#001016",
-    fontWeight: 700,
-    fontSize: "1.05rem",
-    cursor: "pointer",
-    minHeight: 56,
-    fontFamily: "inherit",
-  },
-  secondary: {
-    padding: "0.95rem 1.5rem",
-    borderRadius: "var(--radius)",
-    border: "1px solid var(--border)",
-    background: "transparent",
-    color: "var(--text)",
-    fontSize: "1rem",
-    cursor: "pointer",
-    minHeight: 56,
-    fontFamily: "inherit",
-  },
-  joinForm: { display: "flex", gap: "0.5rem", maxWidth: 360, flexWrap: "wrap" },
-  input: {
-    flex: 1,
-    minWidth: 0,
-    padding: "0.7rem 0.9rem",
-    borderRadius: "var(--radius)",
-    border: "1px solid var(--border)",
-    background: "var(--bg-input)",
-    color: "var(--text)",
-    fontSize: "1.05rem",
-    letterSpacing: "0.15em",
-    textTransform: "uppercase",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-  },
-  joinBtn: {
-    padding: "0.7rem 1.1rem",
-    borderRadius: "var(--radius)",
-    border: "none",
-    background: "var(--primary)",
-    color: "#fff",
-    fontWeight: 600,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-  error: { color: "var(--danger)", margin: 0, fontSize: "0.9rem" },
-};

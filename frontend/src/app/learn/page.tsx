@@ -1,155 +1,143 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LearnClient } from "./LearnClient";
+import { ArrowRight, BookOpen, CheckCircle2, Flame, Lock, Sparkles, Star } from "lucide-react";
+import { PageShell } from "@/components/primitives/PageShell";
+import { SectionHeader } from "@/components/primitives/SectionHeader";
+import { SiteFooter } from "@/components/primitives/Footer";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { CURRICULUM } from "@/data/curriculum";
+import { LearnProgressClient } from "./LearnProgressClient";
+import { t } from "@/i18n";
 
 export const metadata: Metadata = {
-  title: "Learn ASL basics",
+  title: "Learning path",
   description:
-    "Interactive guide to 27 American Sign Language signs — letters, numbers, and common words. Practice each one with your camera.",
+    "Structured ASL lessons with live recognition feedback. Practise letters, numbers, and conversational vocabulary in your browser.",
 };
-
-const SIGNS = [
-  { word: "A", category: "letter" as const, description: "Closed fist, thumb resting on the side of the index finger.", tips: "Keep the thumb visible — don't tuck it under." },
-  { word: "B", category: "letter" as const, description: "Four fingers straight up together, thumb folded across the palm.", tips: "Keep all four fingers parallel and together." },
-  { word: "C", category: "letter" as const, description: "Curve all fingers and thumb into a C shape.", tips: "Both the fingers and thumb should curve — no rigid edges." },
-  { word: "D", category: "letter" as const, description: "Index finger points up, other fingers and thumb form a circle.", tips: "The circle should be clear — touch thumb tip to middle fingertip." },
-  { word: "E", category: "letter" as const, description: "All four fingers bent, touching the thumb.", tips: "Fingers hook down together; thumb presses up to meet them." },
-  { word: "F", category: "letter" as const, description: "Index and thumb form a circle; other three fingers point up.", tips: "Three fingers stay extended and slightly separated." },
-  { word: "I", category: "letter" as const, description: "Pinky finger extended up, other fingers closed in a fist.", tips: "Keep the pinky fully straight — it's easy to let it droop." },
-  { word: "L", category: "letter" as const, description: "Index finger points up, thumb points out — classic L shape.", tips: "Hand is sideways so the L faces the viewer." },
-  { word: "O", category: "letter" as const, description: "All fingers curve to meet the thumb in a round O shape.", tips: "Aim for symmetry — it should look like a circle from the front." },
-  { word: "V", category: "letter" as const, description: "Index and middle fingers up in a V; other fingers closed.", tips: "Keep the two fingers fully extended and apart." },
-  { word: "W", category: "letter" as const, description: "Index, middle, and ring fingers up and spread in a W.", tips: "Three fingers — not two. Ring finger is the common miss." },
-  { word: "Y", category: "letter" as const, description: "Pinky and thumb extended; other three fingers closed.", tips: "Looks like a 'hang loose' gesture. Thumb must stay fully extended." },
-  { word: "1", category: "number" as const, description: "Index finger points straight up; all other fingers closed.", tips: "Identical to pointing — keep the finger fully vertical." },
-  { word: "2", category: "number" as const, description: "Index and middle fingers up in a V.", tips: "Palm usually faces the signer for numbers, faces out for letters." },
-  { word: "5", category: "number" as const, description: "All five fingers spread wide open.", tips: "Spread them as wide as comfortable — a tight 5 looks like a B." },
-  { word: "10", category: "number" as const, description: "Closed fist with thumb up, shaken slightly at the wrist.", tips: "The shake is small — two short twists, not a full wrist turn." },
-  { word: "hello", category: "word" as const, description: "Open hand touches forehead (fingers together), then swings out and away — like a salute.", tips: "Start at the temple, not the top of the head. Keep fingers together." },
-  { word: "thank_you", category: "word" as const, description: "Flat hand starts at chin, moves forward and slightly down toward the other person.", tips: "Think of 'blowing a kiss' from the chin — smooth and deliberate." },
-  { word: "please", category: "word" as const, description: "Open hand, palm down, circles on the chest.", tips: "The circle is horizontal — palm stays flat against the chest." },
-  { word: "yes", category: "word" as const, description: "Closed fist nods up and down at the wrist, like a nodding head.", tips: "The fist itself is the 'head' nodding — keep the motion small and clear." },
-  { word: "no", category: "word" as const, description: "Index and middle fingers come together to tap the thumb, twice.", tips: "Fingers snap closed — not a sideways head shake." },
-  { word: "help", category: "word" as const, description: "Thumb-up fist sits on the palm of the other hand; both hands rise together.", tips: "The flat hand lifts the fist — think of giving someone a boost." },
-  { word: "sorry", category: "word" as const, description: "Closed fist circles on the chest over the heart.", tips: "Circle is small and sincere — over the heart, not the stomach." },
-  { word: "water", category: "word" as const, description: "W-handshape taps the chin twice.", tips: "Form a clear W first, then two light taps. Don't rush the W." },
-  { word: "more", category: "word" as const, description: "Both hands in O/pinch shapes tap fingertips together twice.", tips: "Both hands mirror each other. Two taps, not one." },
-  { word: "stop", category: "word" as const, description: "One flat hand chops down onto the upturned palm of the other hand.", tips: "Sharp, decisive motion — it's a stop sign landing, not a tap." },
-  { word: "i_love_you", category: "word" as const, description: "Pinky, index finger, and thumb extended; middle and ring folded — combined I-L-Y handshape.", tips: "One single handshape, not three separate letters. Hold it steady." },
-];
 
 export default function LearnPage() {
   return (
-    <div style={styles.shell}>
-      <header style={styles.topbar}>
-        <Link href="/" style={styles.back}>← Back</Link>
-        <h1 style={styles.title}>Learn ASL basics</h1>
-        <Link href="/practice" style={styles.practiceLink}>
-          Practice with your camera →
-        </Link>
-      </header>
+    <PageShell>
+      <div className="pt-10 lg:pt-16">
+        <SectionHeader
+          eyebrow="Learning path"
+          title={t("learn.title")}
+          description={t("learn.subhead")}
+          as="h1"
+        />
 
-      <main id="main-content" style={styles.main}>
-        <p style={styles.intro}>
-          SignLearn recognises <strong>93 signs</strong> — 26 letters, 10
-          digits, and 57 words. Each card below describes the handshape so you
-          can practise before opening the camera.
-        </p>
+        <LearnProgressClient />
+      </div>
 
-        <LearnClient signs={SIGNS} />
+      <div className="mt-10 space-y-12 pb-16">
+        {CURRICULUM.map((unit, unitIdx) => (
+          <section key={unit.id} aria-labelledby={`unit-${unit.id}`}>
+            <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="eyebrow">Unit {unitIdx + 1}</p>
+                <h2 id={`unit-${unit.id}`} className="mt-1 heading-h2 text-[var(--color-text)]">
+                  {unit.title}
+                </h2>
+                <p className="mt-1 max-w-2xl text-[var(--color-text-muted)]">
+                  {unit.subtitle}
+                </p>
+              </div>
+              <Badge tone="neutral" className="self-start">
+                {unit.lessons.length} lessons
+              </Badge>
+            </header>
 
-        <section style={styles.cta} aria-label="Get started">
-          <h2 style={styles.ctaTitle}>Ready for a real conversation?</h2>
-          <p style={styles.ctaSub}>
-            Start a room and share the link — your hearing partner joins in
-            seconds, no install needed.
-          </p>
-          <div style={styles.ctaRow}>
-            <Link href="/practice" style={styles.ctaBtnSecondary}>Practice solo first</Link>
-            <Link href="/" style={styles.ctaBtnPrimary}>Start a conversation →</Link>
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {unit.lessons.map((lesson, idx) => (
+                <li key={lesson.id} className="h-full">
+                  <Card className="group flex h-full flex-col overflow-hidden transition hover:border-[var(--color-brand)]">
+                    <Link
+                      href={`/learn/${lesson.id}`}
+                      className="flex h-full flex-col gap-3 p-5 text-[var(--color-text)] hover:no-underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)]"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-brand-subtle)] text-[var(--color-brand-subtle-foreground)] font-bold"
+                          aria-hidden
+                        >
+                          {idx + 1}
+                        </span>
+                        <div className="flex items-center gap-1.5" aria-label={`Difficulty ${lesson.difficulty} of 3`}>
+                          {Array.from({ length: 3 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={
+                                i < lesson.difficulty
+                                  ? "size-3.5 fill-[var(--color-warning)] text-[var(--color-warning)]"
+                                  : "size-3.5 text-[var(--color-border-strong)]"
+                              }
+                              aria-hidden
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <h3 className="heading-h3 text-[var(--color-text)]">{lesson.title}</h3>
+                      <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+                        {lesson.description}
+                      </p>
+                      <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2">
+                        {lesson.signs.slice(0, 6).map((s) => (
+                          <code
+                            key={s}
+                            className="rounded-[var(--radius-xs)] bg-[var(--color-surface-sunken)] px-1.5 py-0.5 font-mono text-[0.72rem] text-[var(--color-text-muted)]"
+                          >
+                            {s}
+                          </code>
+                        ))}
+                        {lesson.signs.length > 6 && (
+                          <span className="text-[0.72rem] text-[var(--color-text-faint)]">
+                            +{lesson.signs.length - 6}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between pt-3">
+                        <span className="text-xs text-[var(--color-text-muted)]">
+                          ~{lesson.durationMin} min
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-brand)] group-hover:underline">
+                          Start lesson <ArrowRight className="size-4" aria-hidden />
+                        </span>
+                      </div>
+                    </Link>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+
+        <Card className="p-8 md:p-10">
+          <div className="flex flex-wrap items-center justify-between gap-6">
+            <div className="max-w-xl">
+              <Sparkles className="size-7 text-[var(--color-brand)]" aria-hidden />
+              <h2 className="mt-3 heading-h2 text-[var(--color-text)]">Want to put it into practice?</h2>
+              <p className="mt-2 text-[var(--color-text-muted)]">
+                Open a room and share the link — your hearing partner joins in seconds. Or jump
+                into solo practice to drill a specific sign.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild variant="secondary" size="lg">
+                <Link href="/practice"><BookOpen aria-hidden /> Solo practice</Link>
+              </Button>
+              <Button asChild size="lg">
+                <Link href="/">
+                  Start a conversation <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              </Button>
+            </div>
           </div>
-        </section>
-      </main>
+        </Card>
+      </div>
 
-      <footer style={styles.footer}>
-        <Link href="/privacy" style={styles.footerLink}>Privacy</Link>
-        <span style={styles.sep}>·</span>
-        <Link href="/" style={styles.footerLink}>Home</Link>
-      </footer>
-    </div>
+      <SiteFooter />
+    </PageShell>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  shell: { minHeight: "100svh", display: "flex", flexDirection: "column" },
-  topbar: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.75rem",
-    padding: "0.75rem 1.5rem",
-    borderBottom: "1px solid var(--border)",
-    background: "var(--bg-elevated)",
-    flexWrap: "wrap",
-  },
-  back: { color: "var(--text-muted)", textDecoration: "none", fontSize: "0.9rem" },
-  title: { margin: 0, fontSize: "1.15rem", fontWeight: 700, flex: 1 },
-  practiceLink: {
-    padding: "0.4rem 0.85rem",
-    borderRadius: "var(--radius)",
-    border: "1px solid var(--border)",
-    color: "var(--text-muted)",
-    textDecoration: "none",
-    fontSize: "0.88rem",
-    whiteSpace: "nowrap",
-  },
-  main: {
-    flex: 1,
-    width: "min(960px, 100%)",
-    margin: "0 auto",
-    padding: "2rem 1.25rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "1.5rem",
-  },
-  intro: { margin: 0, color: "var(--text-muted)", lineHeight: 1.6 },
-  cta: {
-    marginTop: "1rem",
-    padding: "1.75rem",
-    background: "var(--bg-elevated)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius-lg)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.75rem",
-  },
-  ctaTitle: { margin: 0, fontSize: "1.25rem" },
-  ctaSub: { margin: 0, color: "var(--text-muted)", lineHeight: 1.5 },
-  ctaRow: { display: "flex", flexWrap: "wrap", gap: "0.75rem" },
-  ctaBtnPrimary: {
-    padding: "0.75rem 1.25rem",
-    borderRadius: "var(--radius)",
-    background: "var(--accent)",
-    color: "#001016",
-    fontWeight: 700,
-    textDecoration: "none",
-    fontSize: "0.95rem",
-  },
-  ctaBtnSecondary: {
-    padding: "0.75rem 1.25rem",
-    borderRadius: "var(--radius)",
-    border: "1px solid var(--border)",
-    color: "var(--text-muted)",
-    textDecoration: "none",
-    fontSize: "0.95rem",
-  },
-  footer: {
-    display: "flex",
-    gap: "0.5rem",
-    justifyContent: "center",
-    padding: "1rem",
-    borderTop: "1px solid var(--border)",
-    fontSize: "0.85rem",
-  },
-  footerLink: { color: "var(--text-muted)", textDecoration: "none" },
-  sep: { color: "var(--text-faint)" },
-};

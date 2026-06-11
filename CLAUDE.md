@@ -10,7 +10,9 @@ SignLearn is a real-time American Sign Language (ASL) recognition system. MediaP
 **Member B** (Full-Stack + Frontend Lead): Flask backend, WebSocket, React UI, speech-to-text — branch `dev-web`.
 
 Vocabulary: 93 classes — `a`–`z` (26), `0`–`9` (10), 24 static words, 33 dynamic words (snake_case). Full list: `docs/vocabulary.md`.  
-Currently trained on **36 classes** (26 letters + 10 digits, ~62K augmented sequences). Best single-run: BiLSTM+raw 83.5% test acc. Phase 3 sweep (raw features, 4 architectures) is in progress. ONNX export verified: p95 = 5.6ms, 196 fps (Phase 4 target: <30ms ✅). See `artifacts/reports/` for current benchmarks.
+Currently trained on **36 classes** (26 letters + 10 digits, ~62K augmented sequences). **Best run: TCN+raw lr=5e-4, 97.84% test accuracy** (`artifacts/runs/phase3-raw-balanced__arch=tcn_fm=raw_lr=0.0005_do=0.4/`). Several other architectures (BiLSTM-v1, CNN-BiLSTM) also above 96%. Phase 3 sweep complete. The residual ~2% error is dominated by linguistically-equivalent class pairs (`two`/`v`, `six`/`w`, `zero`/`o`) which share identical ASL handshapes. ONNX export of the TCN winner is the production checkpoint (`artifacts/checkpoints/tcn_best.onnx`, p95 = 5.6ms, 196 fps). See `artifacts/reports/` for current benchmarks.
+
+**Word model (research extension):** 61-class BiLSTM trained on WLASL data, `artifacts/runs/word-bilstm-v1/` — 26% top-1, 62% top-5 test accuracy. Vocabulary limited by WLASL data scarcity; not currently served. Intended future work: replace WLASL clips with native-signer recordings of conversational vocabulary.
 
 ---
 

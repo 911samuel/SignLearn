@@ -1,25 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { Camera, CheckCircle2, Mic, ShieldCheck } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 
 interface PermissionGateProps {
-  /** What capability we'll ask for — drives copy. */
   kind: "camera" | "microphone";
   onAllow: () => void | Promise<void>;
-  /** Optional escape hatch (e.g. "Try practice mode"). */
   secondaryAction?: { label: string; onClick: () => void };
 }
 
-/**
- * Shown BEFORE we call getUserMedia. The browser prompt is the most-rejected
- * dialog on the web; pre-explaining what we collect (landmarks, not video)
- * and what stays local converts the scariest moment into the most reassuring.
- */
 export function PermissionGate({ kind, onAllow, secondaryAction }: PermissionGateProps) {
   const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const isCamera = kind === "camera";
+  const Icon = isCamera ? Camera : Mic;
 
   async function handleAllow() {
     setError(null);
@@ -33,119 +30,73 @@ export function PermissionGate({ kind, onAllow, secondaryAction }: PermissionGat
     }
   }
 
+  const steps = isCamera
+    ? [
+        ["We turn on your camera", "only in this tab."],
+        ["We track 21 hand landmarks per hand", "126 numbers per frame."],
+        ["Your raw video stays on your device.", "Only landmark numbers go to our server."],
+      ]
+    : [
+        ["We turn on your microphone", "only in this tab."],
+        ["Your browser transcribes speech to text", "using the Web Speech API."],
+        ["Only the text caption is sent to your partner.", "Audio is not stored."],
+      ];
+
   return (
-    <div style={styles.shell}>
-      <div style={styles.card}>
-        <div style={styles.iconRow} aria-hidden>
-          <span style={styles.icon}>{isCamera ? "📷" : "🎙️"}</span>
+    <div className="grid place-items-center px-4 py-8">
+      <Card className="w-full max-w-xl p-8">
+        <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--color-brand-subtle)] text-[var(--color-brand-subtle-foreground)]">
+          <Icon className="size-7" aria-hidden />
         </div>
-
-        <h2 style={styles.title}>
-          {isCamera ? "Turn on your camera to start signing" : "Turn on your microphone to start speaking"}
+        <h2 className="heading-h2 text-[var(--color-text)]">
+          {isCamera
+            ? "Turn on your camera to start signing"
+            : "Turn on your microphone to start speaking"}
         </h2>
-
-        <p style={styles.lead}>
+        <p className="mt-3 text-[var(--color-text-muted)] leading-relaxed">
           {isCamera
             ? "We use your camera locally to read your hand position. Your video never leaves this browser."
-            : "We use your mic to transcribe what you say so the signer can read it. Audio is not stored."}
+            : "We use your microphone to transcribe what you say so the signer can read it. Audio is never stored."}
         </p>
 
-        <ol style={styles.steps}>
-          {isCamera ? (
-            <>
-              <li><strong>We turn on your camera</strong> — only in this tab.</li>
-              <li><strong>We track 21 hand landmarks per hand</strong> (126 numbers per frame).</li>
-              <li><strong>Your raw video stays on your device.</strong> Only the landmark numbers go to our server.</li>
-            </>
-          ) : (
-            <>
-              <li><strong>We turn on your microphone</strong> — only in this tab.</li>
-              <li><strong>Your browser transcribes speech to text</strong> using the Web Speech API.</li>
-              <li><strong>Only the text caption</strong> is sent to your partner. The audio is not stored.</li>
-            </>
-          )}
-        </ol>
+        <ul className="mt-6 space-y-3">
+          {steps.map(([bold, rest]) => (
+            <li key={bold} className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[var(--color-success)]" aria-hidden />
+              <p className="text-[var(--color-text)]">
+                <strong>{bold}</strong>{" "}
+                <span className="text-[var(--color-text-muted)]">— {rest}</span>
+              </p>
+            </li>
+          ))}
+        </ul>
 
-        <div style={styles.actions}>
-          <button
-            type="button"
-            className="sl-btn-primary"
-            onClick={handleAllow}
-            disabled={requesting}
-            style={styles.primary}
-          >
-            {requesting ? "Requesting…" : isCamera ? "Allow camera & start" : "Allow microphone & start"}
-          </button>
+        <div className="mt-7 flex flex-col gap-2 sm:flex-row">
+          <Button size="lg" onClick={handleAllow} disabled={requesting} className="sm:flex-1">
+            {requesting
+              ? "Requesting…"
+              : isCamera
+                ? "Allow camera & start"
+                : "Allow microphone & start"}
+          </Button>
           {secondaryAction && (
-            <button
-              type="button"
-              className="sl-btn"
-              onClick={secondaryAction.onClick}
-              style={styles.secondary}
-            >
+            <Button variant="secondary" size="lg" onClick={secondaryAction.onClick}>
               {secondaryAction.label}
-            </button>
+            </Button>
           )}
         </div>
 
         {error && (
-          <p style={styles.error} role="alert">
-            {error} You can re‑enable permission from your browser's address bar.
-          </p>
+          <Alert tone="danger" className="mt-4" title="Permission denied">
+            {error} You can re-enable it from your browser&apos;s address bar.
+          </Alert>
         )}
 
-        <p style={styles.fine}>
-          By continuing you agree to our <a href="/privacy">privacy notes</a>. SignLearn is open source —
-          you can verify every claim above in the code.
+        <p className="mt-5 inline-flex items-center justify-center gap-1.5 text-center text-xs text-[var(--color-text-muted)] w-full">
+          <ShieldCheck className="size-3.5" aria-hidden />
+          SignLearn is open source — every claim above can be verified in the code.
         </p>
-      </div>
+      </Card>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  shell: { display: "grid", placeItems: "center", flex: 1, padding: "1.5rem" },
-  card: {
-    width: "min(520px, 100%)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.85rem",
-    padding: "1.75rem",
-    background: "var(--bg-card)",
-    borderRadius: "var(--radius-lg)",
-    boxShadow: "var(--shadow-card)",
-  },
-  iconRow: { display: "flex", justifyContent: "center" },
-  icon: { fontSize: "2.5rem" },
-  title: { margin: 0, fontSize: "1.35rem", textAlign: "center", lineHeight: 1.25 },
-  lead: { margin: 0, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.5 },
-  steps: {
-    margin: "0.5rem 0",
-    paddingLeft: "1.25rem",
-    lineHeight: 1.7,
-    color: "var(--text)",
-    fontSize: "0.95rem",
-  },
-  actions: { display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" },
-  primary: {
-    padding: "0.85rem 1rem",
-    borderRadius: "var(--radius)",
-    border: "none",
-    background: "var(--primary)",
-    color: "#fff",
-    fontWeight: 600,
-    fontSize: "1rem",
-    cursor: "pointer",
-  },
-  secondary: {
-    padding: "0.65rem 1rem",
-    borderRadius: "var(--radius)",
-    border: "1px solid var(--border)",
-    background: "transparent",
-    color: "var(--text-muted)",
-    cursor: "pointer",
-    fontSize: "0.9rem",
-  },
-  error: { color: "var(--danger)", margin: 0, fontSize: "0.9rem", textAlign: "center" },
-  fine: { margin: 0, fontSize: "0.78rem", color: "var(--text-faint)", textAlign: "center" },
-};

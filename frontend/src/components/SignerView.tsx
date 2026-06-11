@@ -2,21 +2,27 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
+import { Pause, Play, RotateCcw, UserRound, Zap } from "lucide-react";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { LandmarkOverlay } from "./LandmarkOverlay";
 import { RemoteVideo } from "./RemoteVideo";
 import { CaptionsPanel } from "./CaptionsPanel";
-import { ConfidenceMeter } from "./ConfidenceMeter";
 import { PermissionGate } from "./PermissionGate";
 import type { Caption } from "@/hooks/useRoom";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { StatusPill, type Status } from "@/components/primitives/StatusPill";
+import { ConfidenceMeter } from "@/components/primitives/ConfidenceMeter";
+import { LivePredictionBadge } from "@/components/primitives/LivePredictionBadge";
 
 const VIDEO_W = 640;
 const VIDEO_H = 480;
 
 export type CamStatus = "ok" | "lost" | "denied" | "pending";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:5001";
 
 interface SignerViewProps {
   socket: Socket | null;
@@ -26,34 +32,40 @@ interface SignerViewProps {
   onPrediction?: (label: string, confidence: number, ts: number) => void;
 }
 
-export function SignerView({ socket, captions, peerPresent, roomId, onPrediction }: SignerViewProps) {
+export function SignerView({ socket, captions, peerPresent, onPrediction }: SignerViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [camStatus, setCamStatus] = useState<CamStatus>("pending");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
-  const { prediction, landmarkerResult, reset, paused, togglePaused, latencyMs, landmarkerError } =
-    useSignRecognition(videoRef, socket);
+  const {
+    wordPrediction,
+    captureStatus,
+    captureProgress,
+    landmarkerResult,
+    reset,
+    paused,
+    togglePaused,
+    latencyMs,
+    landmarkerError,
+  } = useSignRecognition(videoRef, socket);
 
-  // Signer is the WebRTC initiator (polite peer).
   const { remoteStream } = useWebRTC(socket, localStream, /*isInitiator*/ true, peerPresent);
 
   const onPredictionRef = useRef(onPrediction);
-  useEffect(() => { onPredictionRef.current = onPrediction; }, [onPrediction]);
-
-  const lastLabelRef = useRef<string | null>(null);
   useEffect(() => {
-    if (prediction.ready && prediction.label && prediction.label !== lastLabelRef.current) {
-      lastLabelRef.current = prediction.label;
-      onPredictionRef.current?.(prediction.label, prediction.confidence ?? 0, Date.now());
-      // Subtle haptic pulse on commit — respects device/browser support silently.
-      try { navigator.vibrate?.(15); } catch {}
-    }
-    if (!prediction.ready || !prediction.label) {
-      lastLabelRef.current = null;
-    }
-  }, [prediction]);
+    onPredictionRef.current = onPrediction;
+  }, [onPrediction]);
 
-  // Tear-down on unmount.
+  useEffect(() => {
+    if (!wordPrediction || wordPrediction.error) return;
+    const best = wordPrediction.top3?.[0];
+    if (!best) return;
+    onPredictionRef.current?.(best.label, best.confidence, Date.now());
+    try {
+      navigator.vibrate?.(15);
+    } catch {}
+  }, [wordPrediction]);
+
   useEffect(() => {
     return () => {
       localStream?.getTracks().forEach((t) => t.stop());
@@ -68,14 +80,10 @@ export function SignerView({ socket, captions, peerPresent, roomId, onPrediction
     stream.getVideoTracks().forEach((track) => {
       track.onended = () => setCamStatus("lost");
     });
-    // Set stream first, then flip status. The useEffect below wires
-    // srcObject after React mounts the <video> element.
     setLocalStream(stream);
     setCamStatus("ok");
   }, []);
 
-  // Attach stream to the video element once it's in the DOM.
-  // Must be an effect — the <video> only renders after setCamStatus("ok").
   useEffect(() => {
     if (camStatus !== "ok" || !localStream || !videoRef.current) return;
     videoRef.current.srcObject = localStream;
@@ -91,141 +99,166 @@ export function SignerView({ socket, captions, peerPresent, roomId, onPrediction
             await requestCamera();
           } catch {
             setCamStatus("denied");
-            throw new Error("Camera permission was denied. You can re‑enable it from your browser's address bar.");
+            throw new Error("Camera permission was denied. Re-enable it from your browser's address bar.");
           }
         }}
       />
     );
   }
 
+  const statusForPill: Status =
+    paused
+      ? "idle"
+      : captureStatus === "signing"
+        ? "signing"
+        : captureStatus === "processing"
+          ? "processing"
+          : "idle";
+
+  const candidates = wordPrediction?.top3 ?? [];
+  const topCandidate = candidates[0];
+
   return (
-    <div style={styles.grid}>
-      <section style={styles.tile} aria-label="Your camera and current sign">
-        <header style={styles.label}>You (Signer)</header>
-        {camStatus === "denied" && (
-          <p style={styles.error} role="alert">
-            Camera access denied — allow camera permission from the address bar and reload.
-          </p>
-        )}
-        {camStatus === "lost" && (
-          <p style={styles.error} role="alert">
-            Camera disconnected — reconnect and reload.
-          </p>
-        )}
-        {landmarkerError && (
-          <p style={styles.error} role="alert">
-            MediaPipe failed to load: {landmarkerError}
-          </p>
-        )}
-        {camStatus === "ok" && (
-          <div style={styles.videoWrapper}>
-            <video
-              ref={videoRef}
-              width={VIDEO_W}
-              height={VIDEO_H}
-              muted
-              playsInline
-              aria-label="Your live camera preview with hand landmark overlay"
-              style={styles.video}
-            />
-            <LandmarkOverlay
-              result={landmarkerResult}
-              width={VIDEO_W}
-              height={VIDEO_H}
-            />
-            {latencyMs !== null && (
-              <span style={styles.latencyPill} aria-label={`Round-trip latency ${latencyMs} milliseconds`}>
-                ⚡ {latencyMs} ms
-              </span>
+    <div className="grid flex-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+      {/* STAGE — camera + landmark overlay + bottom controls */}
+      <Card className="flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+          <div className="inline-flex items-center gap-2">
+            <UserRound className="size-4 text-[var(--color-text-muted)]" aria-hidden />
+            <span className="eyebrow">You (Signer)</span>
+          </div>
+          <StatusPill status={statusForPill} />
+        </div>
+
+        <div className="relative bg-[var(--color-surface-sunken)]">
+          {camStatus === "denied" && (
+            <Alert tone="danger" title="Camera access denied" className="m-4">
+              Allow camera permission from the browser&apos;s address bar, then reload this page.
+            </Alert>
+          )}
+          {camStatus === "lost" && (
+            <Alert tone="warning" title="Camera disconnected" className="m-4">
+              Reconnect your camera and reload to continue.
+            </Alert>
+          )}
+          {landmarkerError && (
+            <Alert tone="danger" title="MediaPipe failed to load" className="m-4">
+              {landmarkerError}
+            </Alert>
+          )}
+
+          {camStatus === "ok" && (
+            <div className="relative bg-black">
+              <video
+                ref={videoRef}
+                width={VIDEO_W}
+                height={VIDEO_H}
+                muted
+                playsInline
+                aria-label="Your live camera preview with hand landmark overlay"
+                className="block w-full -scale-x-100"
+              />
+              <LandmarkOverlay
+                result={landmarkerResult}
+                width={VIDEO_W}
+                height={VIDEO_H}
+              />
+              {latencyMs !== null && (
+                <Badge
+                  tone="neutral"
+                  className="absolute right-3 top-3 border-none bg-black/55 text-white backdrop-blur"
+                >
+                  <Zap className="size-3" aria-hidden />
+                  <span className="font-mono tabular-nums">{latencyMs} ms</span>
+                  <span className="sr-only">round-trip latency</span>
+                </Badge>
+              )}
+              {captureStatus === "signing" && !paused && (
+                <div className="absolute inset-x-3 bottom-3">
+                  <Progress
+                    value={Math.round(captureProgress * 100)}
+                    tone="brand"
+                    aria-label={`Capture progress ${Math.round(captureProgress * 100)} percent`}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* BOTTOM CONTROLS */}
+        <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={paused ? "primary" : "secondary"}
+              onClick={togglePaused}
+              aria-pressed={paused}
+            >
+              {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
+              {paused ? "Resume" : "Pause"}
+            </Button>
+            <Button variant="secondary" onClick={reset}>
+              <RotateCcw aria-hidden /> Reset
+            </Button>
+            <span className="ml-auto text-xs text-[var(--color-text-muted)]">
+              {paused
+                ? "Paused — press Resume when ready"
+                : captureStatus === "signing"
+                  ? "Hold the sign — we’re reading it…"
+                  : captureStatus === "processing"
+                    ? "Recognising…"
+                    : "Start signing whenever you're ready"}
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      {/* RIGHT RAIL — prediction + confidence + peer captions */}
+      <div className="flex flex-col gap-4">
+        <Card className="p-5">
+          {wordPrediction?.error ? (
+            <Alert tone="danger" title="Prediction error">
+              {wordPrediction.error}
+            </Alert>
+          ) : (
+            <>
+              <LivePredictionBadge
+                candidates={candidates}
+                onSelect={(label) => {
+                  const conf = candidates.find((c) => c.label === label)?.confidence ?? 0;
+                  onPrediction?.(label, conf, Date.now());
+                }}
+              />
+              {topCandidate && (
+                <div className="mt-5">
+                  <ConfidenceMeter value={topCandidate.confidence} size="md" />
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+
+        <Card className="flex-1 p-4">
+          <div className="mb-2 inline-flex items-center gap-2">
+            <span className="eyebrow">From hearing partner</span>
+            {!peerPresent && (
+              <Badge tone="warning" className="text-[0.65rem]">Waiting…</Badge>
             )}
           </div>
-        )}
+          <CaptionsPanel
+            captions={captions}
+            filter="speech"
+            emptyHint="When your hearing partner speaks, their captions appear here."
+          />
+        </Card>
 
-        <ConfidenceMeter
-          value={prediction.confidence ?? null}
-          label={prediction.label ?? null}
-          ready={prediction.ready}
-          paused={paused}
-          onCorrect={roomId ? (original, corrected) => {
-            fetch(`${BACKEND_URL}/corrections`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                room_id: roomId,
-                original_text: original,
-                corrected_text: corrected,
-                confidence: prediction.confidence ?? null,
-              }),
-            }).catch(() => {});
-          } : undefined}
-        />
-
-        <div style={styles.controls}>
-          <button
-            className="sl-btn"
-            onClick={togglePaused}
-            style={{ ...styles.btn, background: paused ? "var(--primary)" : "var(--bg-card)" }}
-            aria-pressed={paused}
-          >
-            {paused ? "▶ Resume" : "⏸ Pause"}
-          </button>
-          <button className="sl-btn" onClick={reset} style={styles.btn}>
-            ✋ Reset sign window
-          </button>
-        </div>
-      </section>
-
-      <section style={styles.tile} aria-label="Hearing peer">
-        <header style={styles.label}>
-          {peerPresent ? "Hearing peer" : "Waiting for the hearing user to join…"}
-        </header>
-        <RemoteVideo stream={remoteStream} style={{ aspectRatio: "4 / 3" }} />
-        <CaptionsPanel
-          captions={captions}
-          filter="speech"
-          emptyHint="Speech captions from the hearing user will show here."
-        />
-      </section>
+        <Card className="overflow-hidden">
+          <div className="px-4 py-2 border-b border-[var(--color-border)] eyebrow">
+            Hearing partner
+          </div>
+          <RemoteVideo stream={remoteStream} className="aspect-video w-full bg-[var(--color-surface-sunken)]" />
+        </Card>
+      </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-    gap: "1rem",
-    flex: 1,
-  },
-  tile: {
-    display: "flex", flexDirection: "column", gap: "0.5rem",
-    padding: "0.75rem", background: "var(--bg-elevated)", borderRadius: "var(--radius-lg)",
-  },
-  label: {
-    fontSize: "0.85rem", color: "var(--text-muted)",
-    textTransform: "uppercase", letterSpacing: "0.05em",
-  },
-  videoWrapper: { position: "relative", lineHeight: 0, width: "100%" },
-  video: {
-    display: "block", borderRadius: "var(--radius)",
-    width: "100%", height: "auto", transform: "scaleX(-1)",
-  },
-  latencyPill: {
-    position: "absolute", top: 8, right: 8,
-    fontSize: "0.72rem",
-    color: "var(--text)",
-    background: "rgba(0, 0, 0, 0.55)",
-    backdropFilter: "blur(6px)",
-    borderRadius: 999,
-    padding: "3px 9px",
-    fontVariantNumeric: "tabular-nums",
-    pointerEvents: "none",
-  },
-  controls: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" },
-  btn: {
-    padding: "0.5rem 1rem", borderRadius: "var(--radius)", border: "1px solid var(--border)",
-    background: "var(--bg-card)", color: "var(--text)", cursor: "pointer",
-    fontSize: "0.9rem", minHeight: 40,
-  },
-  error: { color: "var(--danger)" },
-};

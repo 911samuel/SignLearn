@@ -2,32 +2,64 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { CheckCircle2, Eye, EyeOff, Flame, RotateCcw, Shuffle, Target, XCircle } from "lucide-react";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
 import { LandmarkOverlay } from "@/components/LandmarkOverlay";
-import { ConfidenceMeter } from "@/components/ConfidenceMeter";
 import { PermissionGate } from "@/components/PermissionGate";
+import { PageShell } from "@/components/primitives/PageShell";
+import { SectionHeader } from "@/components/primitives/SectionHeader";
+import { ConfidenceMeter } from "@/components/primitives/ConfidenceMeter";
+import { StatusPill, type Status } from "@/components/primitives/StatusPill";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ALL_LESSONS } from "@/data/curriculum";
+import { recordAttempt, useProgress } from "@/lib/progress";
+import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 const VIDEO_W = 640;
 const VIDEO_H = 480;
 
 type CamStatus = "pending" | "ok" | "denied" | "lost";
 
+const TARGETS = Array.from(new Set(ALL_LESSONS.flatMap((l) => l.signs))).sort();
+
 export default function PracticePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [camStatus, setCamStatus] = useState<CamStatus>("pending");
-  const [history, setHistory] = useState<string[]>([]);
+  const [target, setTarget] = useState<string>(TARGETS[0] ?? "hello");
+  const [streak, setStreak] = useState(0);
+  const [a11yMode, setA11yMode] = useState(false);
+  const [outcome, setOutcome] = useState<"hit" | "miss" | null>(null);
+  const progress = useProgress();
 
-  const { prediction, landmarkerResult, reset, paused, togglePaused, latencyMs } =
-    useSignRecognition(videoRef, null);
+  const {
+    wordPrediction,
+    captureStatus,
+    captureProgress,
+    landmarkerResult,
+    reset,
+    paused,
+    togglePaused,
+    latencyMs,
+  } = useSignRecognition(videoRef, null);
 
-  const lastRef = useRef<string | null>(null);
+  // When a fresh prediction lands, compare against the target.
   useEffect(() => {
-    if (prediction.ready && prediction.label && prediction.label !== lastRef.current) {
-      lastRef.current = prediction.label;
-      setHistory((h) => [...h.slice(-49), prediction.label!]);
+    if (!wordPrediction || wordPrediction.error) return;
+    const best = wordPrediction.top3?.[0];
+    if (!best) return;
+    const hit = best.label === target;
+    setOutcome(hit ? "hit" : "miss");
+    setStreak((s) => (hit ? s + 1 : 0));
+    recordAttempt(best.label, hit, best.confidence);
+    if (hit) {
+      try { navigator.vibrate?.(25); } catch {}
     }
-    if (!prediction.ready || !prediction.label) lastRef.current = null;
-  }, [prediction]);
+    const id = window.setTimeout(() => setOutcome(null), 1400);
+    return () => window.clearTimeout(id);
+  }, [wordPrediction, target]);
 
   async function requestCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -39,206 +71,220 @@ export default function PracticePage() {
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(() => {});
     }
-    stream.getVideoTracks().forEach((t) => {
-      t.onended = () => setCamStatus("lost");
+    stream.getVideoTracks().forEach((tr) => {
+      tr.onended = () => setCamStatus("lost");
     });
   }
 
   if (camStatus === "pending") {
     return (
-      <div style={styles.shell}>
-        <div style={styles.topbar}>
-          <Link href="/" style={styles.back}>← Back</Link>
-          <span style={styles.title}>Practice mode</span>
+      <PageShell>
+        <div className="pt-10">
+          <SectionHeader eyebrow="Practice" title={t("practice.title")} description={t("practice.subhead")} as="h1" />
         </div>
-        <PermissionGate
-          kind="camera"
-          onAllow={async () => {
-            try {
-              await requestCamera();
-            } catch {
-              setCamStatus("denied");
-              throw new Error("Camera permission was denied.");
-            }
-          }}
-        />
-      </div>
+        <div className="mt-8">
+          <PermissionGate
+            kind="camera"
+            onAllow={async () => {
+              try {
+                await requestCamera();
+              } catch {
+                setCamStatus("denied");
+                throw new Error("Camera permission was denied.");
+              }
+            }}
+          />
+        </div>
+      </PageShell>
     );
   }
 
-  return (
-    <div style={styles.shell}>
-      <header style={styles.topbar}>
-        <Link href="/" style={styles.back} aria-label="Back to home">← Back</Link>
-        <span style={styles.title}>Practice mode</span>
-        <span style={styles.badge}>No one else can see you</span>
-      </header>
+  const statusForPill: Status =
+    paused
+      ? "idle"
+      : captureStatus === "signing"
+        ? "signing"
+        : captureStatus === "processing"
+          ? "processing"
+          : "idle";
 
-      <main id="main-content" tabIndex={-1} style={styles.main}>
-        <div style={styles.col}>
-          <section style={styles.tile} aria-label="Your camera preview">
-            {camStatus === "denied" && (
-              <p style={styles.error} role="alert">
-                Camera access denied. Allow permission from the address bar and reload.
-              </p>
+  function pickRandom() {
+    let next = target;
+    while (next === target && TARGETS.length > 1) {
+      next = TARGETS[Math.floor(Math.random() * TARGETS.length)];
+    }
+    setTarget(next);
+    setOutcome(null);
+  }
+
+  return (
+    <PageShell>
+      <div className="pt-10">
+        <SectionHeader
+          eyebrow="Practice"
+          title={t("practice.title")}
+          description={t("practice.subhead")}
+          as="h1"
+        />
+      </div>
+
+      <div className="mt-8 grid gap-5 lg:grid-cols-[1.4fr_1fr] pb-12">
+        {/* Camera stage */}
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+            <Badge tone="brand">
+              <Target className="size-3.5" aria-hidden />
+              Target: <strong className="ml-1 font-semibold">{target}</strong>
+            </Badge>
+            <StatusPill status={statusForPill} />
+          </div>
+
+          <div className="relative bg-black">
+            <video
+              ref={videoRef}
+              width={VIDEO_W}
+              height={VIDEO_H}
+              muted
+              playsInline
+              aria-label="Your camera preview with hand landmark overlay"
+              className="block w-full -scale-x-100"
+            />
+            <LandmarkOverlay result={landmarkerResult} width={VIDEO_W} height={VIDEO_H} />
+
+            {latencyMs !== null && (
+              <Badge tone="neutral" className="absolute right-3 top-3 border-none bg-black/55 text-white backdrop-blur">
+                <span className="font-mono">{latencyMs} ms</span>
+              </Badge>
             )}
-            {camStatus === "lost" && (
-              <p style={styles.error} role="alert">Camera disconnected. Reload to reconnect.</p>
-            )}
-            {camStatus === "ok" && (
-              <div style={styles.videoWrapper}>
-                <video
-                  ref={videoRef}
-                  width={VIDEO_W}
-                  height={VIDEO_H}
-                  muted
-                  playsInline
-                  aria-label="Your camera preview with hand landmark overlay"
-                  style={styles.video}
-                />
-                <LandmarkOverlay result={landmarkerResult} width={VIDEO_W} height={VIDEO_H} />
-                {latencyMs !== null && (
-                  <span style={styles.latencyPill} aria-hidden="true">⚡ {latencyMs} ms</span>
+
+            {outcome && (
+              <div
+                role="status"
+                aria-live="assertive"
+                className={cn(
+                  "absolute inset-0 grid place-items-center bg-black/40 text-white sl-pop-in pointer-events-none",
+                )}
+              >
+                {outcome === "hit" ? (
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <CheckCircle2 className="size-20 text-[var(--color-success)]" aria-hidden />
+                    <p className="heading-display">Nice!</p>
+                    <p className="text-lg">You signed &ldquo;{target}&rdquo;</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <XCircle className="size-20 text-[var(--color-warning)]" aria-hidden />
+                    <p className="heading-display">Try again</p>
+                    <p className="text-lg">We read another sign.</p>
+                  </div>
                 )}
               </div>
             )}
 
-            <ConfidenceMeter
-              value={prediction.confidence ?? null}
-              label={prediction.label ?? null}
-              ready={prediction.ready}
-              paused={paused}
-            />
-
-            <div style={styles.controls}>
-              <button
-                className="sl-btn"
-                onClick={togglePaused}
-                style={{ ...styles.btn, background: paused ? "var(--primary)" : "var(--bg-card)" }}
-                aria-pressed={paused}
-              >
-                {paused ? "▶ Resume" : "⏸ Pause"}
-              </button>
-              <button className="sl-btn" onClick={reset} style={styles.btn}>✋ Reset window</button>
-              <button className="sl-btn" onClick={() => setHistory([])} style={styles.btn}>Clear history</button>
-            </div>
-          </section>
-        </div>
-
-        <div style={styles.col}>
-          <section style={styles.tile} aria-label="Practice history">
-            <header style={styles.label}>What I signed</header>
-            {history.length === 0 ? (
-              <p style={styles.empty}>Signs you make will appear here. Try it!</p>
-            ) : (
-              <div style={styles.historyWrap} aria-live="polite">
-                {history.map((word, i) => (
-                  <span
-                    key={i}
-                    className={i === history.length - 1 ? "sl-chip-new" : undefined}
-                    style={styles.chip}
-                  >
-                    {word}
-                  </span>
-                ))}
+            {captureStatus === "signing" && !paused && (
+              <div className="absolute inset-x-3 bottom-3 h-2.5 overflow-hidden rounded-full bg-white/25">
+                <div
+                  className="h-full bg-[var(--color-brand)]"
+                  style={{ width: `${Math.round(captureProgress * 100)}%` }}
+                />
               </div>
             )}
+          </div>
 
-            <div style={styles.help}>
-              <h2 style={styles.helpTitle}>Tips for better recognition</h2>
-              <ul style={styles.helpList}>
-                <li>Good lighting on your hands — no strong backlight.</li>
-                <li>Keep hands fully in frame, roughly arm&apos;s-length away.</li>
-                <li>Hold each sign for a beat — the model reads 30 frames at a time.</li>
-                <li>Reset the window between distinct signs.</li>
-              </ul>
-              <p style={styles.readyLine}>
-                Ready to have a real conversation?{" "}
-                <Link href="/" style={styles.startLink}>Start a room →</Link>
-              </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant={paused ? "primary" : "secondary"} onClick={togglePaused}>
+                {paused ? "Resume" : "Pause"}
+              </Button>
+              <Button variant="secondary" onClick={reset}>
+                <RotateCcw aria-hidden /> Reset
+              </Button>
+              <Button variant="secondary" onClick={pickRandom}>
+                <Shuffle aria-hidden /> Random sign
+              </Button>
             </div>
-          </section>
+            <Button
+              variant="ghost"
+              onClick={() => setA11yMode((v) => !v)}
+              aria-pressed={a11yMode}
+            >
+              {a11yMode ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+              {a11yMode ? "Hide reference" : "Show reference"}
+            </Button>
+          </div>
+        </Card>
+
+        {/* Right rail — target picker, streak, prediction */}
+        <div className="flex flex-col gap-4">
+          <Card className="p-5">
+            <p className="eyebrow">Pick a target sign</p>
+            <div className="mt-3 flex flex-wrap gap-2 max-h-[16rem] overflow-y-auto pr-1" role="radiogroup" aria-label="Target sign">
+              {TARGETS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={target === s}
+                  onClick={() => {
+                    setTarget(s);
+                    setOutcome(null);
+                  }}
+                  className={cn(
+                    "inline-flex h-9 items-center rounded-full border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)]",
+                    target === s
+                      ? "border-transparent bg-[var(--color-brand)] text-[var(--color-brand-foreground)]"
+                      : "border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+                  )}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="p-4">
+              <p className="eyebrow">Current streak</p>
+              <p className="mt-2 inline-flex items-center gap-2 heading-h2 text-[var(--color-text)]">
+                <Flame className="size-6 text-[var(--color-warning)]" aria-hidden />
+                {streak}
+              </p>
+            </Card>
+            <Card className="p-4">
+              <p className="eyebrow">All-time XP</p>
+              <p className="mt-2 heading-h2 text-[var(--color-text)]">{progress.xp.toLocaleString()}</p>
+            </Card>
+          </div>
+
+          <Card className="p-5">
+            <p className="eyebrow">Latest reading</p>
+            {wordPrediction?.top3?.[0] ? (
+              <>
+                <p className="mt-2 heading-h2 text-[var(--color-text)]">
+                  {wordPrediction.top3[0].label}
+                </p>
+                <ConfidenceMeter value={wordPrediction.top3[0].confidence} className="mt-3" />
+              </>
+            ) : (
+              <p className="mt-2 text-[var(--color-text-faint)]">Sign something to see a reading.</p>
+            )}
+          </Card>
+
+          {a11yMode && (
+            <Card className="p-5">
+              <p className="eyebrow">Reference</p>
+              <p className="mt-3 text-[var(--color-text)]">
+                Hold the sign for <strong>{target}</strong> in front of the camera. Make sure your
+                hand is fully visible and lighting is even.
+              </p>
+              <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+                If recognition keeps missing, slow the motion down and check the landmark overlay is
+                tracking all five fingers.
+              </p>
+            </Card>
+          )}
         </div>
-      </main>
-    </div>
+      </div>
+    </PageShell>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  shell: { minHeight: "100svh", display: "flex", flexDirection: "column" },
-  topbar: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.75rem",
-    padding: "0.7rem 1.25rem",
-    borderBottom: "1px solid var(--border)",
-    background: "var(--bg-elevated)",
-  },
-  back: { color: "var(--text-muted)", textDecoration: "none", fontSize: "0.9rem" },
-  title: { fontWeight: 600, fontSize: "1rem" },
-  badge: {
-    marginLeft: "auto",
-    padding: "0.25rem 0.65rem",
-    borderRadius: 999,
-    background: "var(--bg-card)",
-    border: "1px solid var(--border)",
-    color: "var(--text-muted)",
-    fontSize: "0.78rem",
-  },
-  main: {
-    flex: 1,
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
-    gap: "1rem",
-    padding: "1rem",
-  },
-  col: { display: "flex", flexDirection: "column" },
-  tile: {
-    display: "flex", flexDirection: "column", gap: "0.6rem",
-    padding: "0.85rem", background: "var(--bg-elevated)",
-    borderRadius: "var(--radius-lg)", flex: 1,
-  },
-  label: {
-    fontSize: "0.82rem", color: "var(--text-muted)",
-    textTransform: "uppercase", letterSpacing: "0.06em",
-  },
-  videoWrapper: { position: "relative", lineHeight: 0, width: "100%" },
-  video: { display: "block", borderRadius: "var(--radius)", width: "100%", height: "auto", transform: "scaleX(-1)" },
-  latencyPill: {
-    position: "absolute", top: 8, right: 8,
-    fontSize: "0.72rem", color: "var(--text)",
-    background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)",
-    borderRadius: 999, padding: "3px 9px",
-    fontVariantNumeric: "tabular-nums", pointerEvents: "none",
-  },
-  controls: { display: "flex", gap: "0.5rem", flexWrap: "wrap" },
-  btn: {
-    padding: "0.5rem 1rem", borderRadius: "var(--radius)", border: "1px solid var(--border)",
-    background: "var(--bg-card)", color: "var(--text)", cursor: "pointer", fontSize: "0.88rem",
-    minHeight: 40, fontFamily: "inherit",
-  },
-  error: { color: "var(--danger)", margin: 0 },
-  empty: { color: "var(--text-faint)", fontSize: "0.9rem", margin: 0 },
-  historyWrap: {
-    display: "flex", flexWrap: "wrap", gap: "0.4rem",
-    minHeight: 48, padding: "0.25rem 0",
-  },
-  chip: {
-    padding: "0.3rem 0.65rem",
-    borderRadius: 999,
-    background: "var(--bg-card)",
-    border: "1px solid var(--border)",
-    fontSize: "0.9rem",
-    color: "var(--accent)",
-    fontWeight: 600,
-  },
-  help: {
-    marginTop: "auto",
-    paddingTop: "1rem",
-    borderTop: "1px solid var(--border)",
-  },
-  helpTitle: { margin: "0 0 0.5rem", fontSize: "0.95rem" },
-  helpList: { margin: 0, paddingLeft: "1.25rem", lineHeight: 1.7, color: "var(--text-muted)", fontSize: "0.9rem" },
-  readyLine: { marginTop: "1rem", fontSize: "0.9rem", color: "var(--text-muted)" },
-  startLink: { color: "var(--accent)", fontWeight: 600 },
-};

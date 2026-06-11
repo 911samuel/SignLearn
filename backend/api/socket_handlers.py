@@ -201,6 +201,72 @@ def register(socketio: SocketIO) -> None:
         emit("reset_ack", {})
 
     # ------------------------------------------------------------------
+    # Word capture (hold-to-sign)
+    #
+    # Client buffers 80 frames locally during a hold gesture and sends the
+    # complete (80, 126) sequence in a single 'word_predict' event. Server
+    # runs the focused word model and returns top-3 candidates so the UI can
+    # surface a pick-from-suggestions affordance (top-5 acc of the word model
+    # is 98.8% so this is the high-confidence path).
+    # ------------------------------------------------------------------
+
+    @socketio.on("word_predict")
+    def on_word_predict(data: dict):
+        import numpy as np
+        from backend.api.model_loader import run_word_inference_probs, get_word_class_names
+        from backend.data.normalize import normalize_sequence
+
+        sid = request.sid
+        room = STORE.room_for_sid(sid)
+        if room is None:
+            return
+        member = room.members.get(sid)
+        if member is None or member.role != "signer":
+            return
+
+        try:
+            frames = data.get("frames") or []
+            arr = np.asarray(frames, dtype=np.float32)
+            if arr.ndim != 2 or arr.shape[1] != 126:
+                emit("word_prediction", {"error": "expected (T, 126) frames"})
+                return
+            # Pad or center-crop to 80 frames
+            T = arr.shape[0]
+            if T < 10:
+                emit("word_prediction", {"error": "too few frames (need ≥10)"})
+                return
+            if T >= 80:
+                start = (T - 80) // 2
+                arr = arr[start:start + 80]
+            else:
+                pad = np.zeros((80 - T, 126), dtype=np.float32)
+                arr = np.concatenate([arr, pad], axis=0)
+            normalized = normalize_sequence(arr)
+            probs = run_word_inference_probs(normalized)
+            names = get_word_class_names()
+            top_idx = np.argsort(probs)[::-1][:3]
+            top3 = [
+                {"label": names[int(i)], "confidence": float(probs[int(i)])}
+                for i in top_idx if int(i) < len(names)
+            ]
+        except Exception as exc:  # noqa: BLE001
+            emit("word_prediction", {"error": f"{type(exc).__name__}: {exc}"})
+            return
+
+        if top3:
+            best = top3[0]
+            socketio.emit("caption", {
+                "source": "sign",
+                "text": best["label"],
+                "confidence": best["confidence"],
+                "name": member.name,
+                "ts": int(time.time() * 1000),
+                "mode": "word",
+                "candidates": top3,
+            }, to=room.id)
+        emit("word_prediction", {"top3": top3})
+
+    # ------------------------------------------------------------------
     # Speech captions
     # ------------------------------------------------------------------
 
