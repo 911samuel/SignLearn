@@ -217,8 +217,8 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
       <div className="flex flex-col gap-4">
         <Card className="p-5">
           {wordPrediction?.error ? (
-            <Alert tone="danger" title="Prediction error">
-              {wordPrediction.error}
+            <Alert tone="danger" title="Couldn't read that sign">
+              Try again — make sure your hand is fully in frame and hold the sign steadily.
             </Alert>
           ) : (
             <>
