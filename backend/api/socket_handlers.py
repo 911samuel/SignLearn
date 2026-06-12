@@ -22,6 +22,7 @@ Wire format (browser ↔ server)::
 
 from __future__ import annotations
 
+import logging
 import time
 
 from flask import request
@@ -31,6 +32,8 @@ from backend.api import storage
 from backend.api.errors import LandmarkValidationError, ModelNotReadyError, SignLearnError
 from backend.api.inference import FrameBuffer
 from backend.api.rooms import STORE
+
+_log = logging.getLogger(__name__)
 
 # One FrameBuffer per connected Signer, keyed by session ID.
 _buffers: dict[str, FrameBuffer] = {}
@@ -250,7 +253,9 @@ def register(socketio: SocketIO) -> None:
                 for i in top_idx if int(i) < len(names)
             ]
         except Exception as exc:  # noqa: BLE001
-            emit("word_prediction", {"error": f"{type(exc).__name__}: {exc}"})
+            # Log the real error server-side, return a user-safe message.
+            _log.exception("word_predict failed for sid=%s", sid)
+            emit("word_prediction", {"error": "prediction_unavailable"})
             return
 
         if top3:

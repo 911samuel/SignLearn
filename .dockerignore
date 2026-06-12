@@ -16,9 +16,11 @@ artifacts/*.sqlite
 artifacts/checkpoints/*
 !artifacts/checkpoints/tcn_best.onnx
 !artifacts/checkpoints/tcn_best.classes.json
+!artifacts/checkpoints/tcn_word_best.onnx
 docs/
 !docs/vocabulary.md
-configs/
+configs/*
+!configs/asl_citizen_demo_words_curated.txt
 *.md
 !docs/vocabulary.md
 .DS_Store

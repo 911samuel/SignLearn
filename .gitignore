@@ -35,6 +35,7 @@ artifacts/*
 artifacts/checkpoints/*
 !artifacts/checkpoints/tcn_best.onnx
 !artifacts/checkpoints/tcn_best.classes.json
+!artifacts/checkpoints/tcn_word_best.onnx
 
 # ── Test / CI caches ─────────────────────────────────────────────────────────
 .pytest_cache/

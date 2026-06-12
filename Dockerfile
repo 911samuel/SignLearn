@@ -16,8 +16,10 @@ RUN pip install --no-cache-dir -r requirements-prod.txt
 COPY backend/ ./backend/
 COPY artifacts/checkpoints/tcn_best.onnx ./artifacts/checkpoints/tcn_best.onnx
 COPY artifacts/checkpoints/tcn_best.classes.json ./artifacts/checkpoints/tcn_best.classes.json
+COPY artifacts/checkpoints/tcn_word_best.onnx ./artifacts/checkpoints/tcn_word_best.onnx
 COPY artifacts/label_map.json ./artifacts/label_map.json
 COPY docs/vocabulary.md ./docs/vocabulary.md
+COPY configs/asl_citizen_demo_words_curated.txt ./configs/asl_citizen_demo_words_curated.txt
 
 ENV PYTHONUNBUFFERED=1 \
     SIGNLEARN_ASYNC_MODE=gevent \
