@@ -57,7 +57,7 @@ export function Toaster({ children }: { children: React.ReactNode }) {
       {children}
       <section
         aria-label="Notifications"
-        className="pointer-events-none fixed bottom-4 right-4 z-[200] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
+        className="pointer-events-none fixed bottom-4 right-4 z-200 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
       >
       <ol className="contents">
         {toasts.map((t) => {
@@ -67,21 +67,21 @@ export function Toaster({ children }: { children: React.ReactNode }) {
               key={t.id}
               role="status"
               className={cn(
-                "pointer-events-auto flex items-start gap-3 rounded-[var(--radius-md)] border p-3 pr-2 shadow-[var(--shadow-overlay)] sl-fade-up",
+                "pointer-events-auto flex items-start gap-3 rounded-md border p-3 pr-2 shadow-(--shadow-overlay)ade-up",
                 cls,
               )}
             >
-              <Icon className="mt-0.5 size-5 shrink-0 text-[var(--color-text)]" aria-hidden />
+              <Icon className="mt-0.5 size-5 shrink-0 text-text" aria-hidden />
               <div className="flex-1 text-sm">
-                <p className="font-semibold text-[var(--color-text)]">{t.title}</p>
+                <p className="font-semibold text-text">{t.title}</p>
                 {t.description && (
-                  <p className="mt-0.5 text-[var(--color-text-muted)]">{t.description}</p>
+                  <p className="mt-0.5 text-text-muted">{t.description}</p>
                 )}
               </div>
               <button
                 onClick={() => dismiss(t.id)}
                 aria-label="Dismiss notification"
-                className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-black/5"
+                className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-text-muted hover:bg-black/5"
               >
                 <X className="size-4" aria-hidden />
               </button>
