@@ -19,6 +19,7 @@ handlers) keep working without modification.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import threading
 from pathlib import Path
@@ -27,7 +28,26 @@ from typing import Any
 import numpy as np
 
 from backend.api.config import CONFIG
-from backend.model.config import compact_class_names
+
+
+def _resolve_class_names(model_path: Path) -> list[str]:
+    """Return class names for the served checkpoint.
+
+    Production path: read a ``<model>.classes.json`` sidecar that was persisted
+    alongside the ONNX export.  This avoids pulling TensorFlow + the training
+    data pipeline into the inference image.
+
+    Dev fallback: call :func:`backend.model.config.compact_class_names`, which
+    scans ``data/processed/train/``.  Lazy-imported so the import chain only
+    activates when the sidecar is missing.
+    """
+    sidecar = model_path.with_suffix("").with_suffix(".classes.json")
+    if sidecar.exists():
+        with sidecar.open() as fh:
+            return list(json.load(fh))
+    from backend.model.config import compact_class_names  # noqa: PLC0415
+
+    return compact_class_names()
 
 _log = logging.getLogger(__name__)
 
@@ -160,7 +180,7 @@ class ModelHolder:
                 import tensorflow as tf
                 new_model = tf.keras.models.load_model(str(path))
                 backend = "keras"
-            new_class_names = compact_class_names()
+            new_class_names = _resolve_class_names(path)
             new_sha = _sha256_file(path)
             # Swap is the last action — if anything above raised, old model stays.
             self._model = new_model

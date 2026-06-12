@@ -10,7 +10,10 @@ SIGNLEARN_MODEL_PATH   Path to the .keras or .onnx checkpoint to serve.
 SIGNLEARN_SECRET_KEY   Flask secret key (required for session cookies in tests).
 SIGNLEARN_ADMIN_TOKEN  Token required by POST /admin/reload.  If unset the
                        endpoint returns 403 (disabled).
-SIGNLEARN_ASYNC_MODE   "threading" (tests) or "eventlet" (production default).
+SIGNLEARN_ASYNC_MODE   "threading" (tests) or "gevent" (production default).
+SIGNLEARN_CORS_ORIGINS Comma-separated allowlist of browser origins.  Defaults
+                       to localhost ports for dev; set to your Vercel URL in
+                       production (e.g. https://signlearn.vercel.app).
 """
 
 import os
@@ -30,17 +33,17 @@ _ASYNC_MODE = os.environ.get("SIGNLEARN_ASYNC_MODE", "threading")
 _DEFAULT_MODEL = _REPO_ROOT / "artifacts" / "checkpoints" / "tcn_best.onnx"
 _MODEL_PATH = Path(os.environ["SIGNLEARN_MODEL_PATH"]) if os.environ.get("SIGNLEARN_MODEL_PATH") else _DEFAULT_MODEL
 
+_DEFAULT_CORS = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+_CORS_ORIGINS = tuple(
+    o.strip() for o in os.environ.get("SIGNLEARN_CORS_ORIGINS", _DEFAULT_CORS).split(",") if o.strip()
+)
+
 
 @dataclass(frozen=True)
 class APIConfig:
     host: str = "127.0.0.1"
     port: int = 5001
-    cors_origins: tuple[str, ...] = (
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-    )
+    cors_origins: tuple[str, ...] = _CORS_ORIGINS
     model_path: Path = _MODEL_PATH
     db_path: Path = _REPO_ROOT / "artifacts" / "signlearn.sqlite"
     sequence_len: int = SEQUENCE_LEN

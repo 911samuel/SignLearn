@@ -1,0 +1,13 @@
+# Slim runtime deps for the production backend image (Render / Docker).
+# Excludes TensorFlow, pytest, Kaggle, matplotlib, etc. — none of those run at
+# inference time. The server only loads ONNX and serves SocketIO.
+flask>=3.0
+flask-socketio>=5.3
+flask-cors>=4.0
+gevent>=24.0
+gevent-websocket>=0.10
+gunicorn>=22.0
+numpy>=2
+scipy>=1.12
+onnxruntime>=1.18
+pyyaml>=6.0
