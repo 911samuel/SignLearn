@@ -1,8 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:5001";
+import { useEffect, useRef } from "react";
+import { Download, Hand, History, Mic } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { BACKEND_URL } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export interface LogEntry {
   id: number;
@@ -19,21 +30,20 @@ interface ConversationLogProps {
   roomId: string;
 }
 
+function fmtTime(ts: number | string) {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function ConversationLog({ entries, roomId }: ConversationLogProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [entries]);
-
-  // Close dropdown when clicking outside.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = () => setMenuOpen(false);
-    window.addEventListener("click", handler, { capture: true });
-    return () => window.removeEventListener("click", handler, { capture: true });
-  }, [menuOpen]);
 
   async function fetchMessages() {
     try {
@@ -41,7 +51,10 @@ export function ConversationLog({ entries, roomId }: ConversationLogProps) {
       if (!res.ok) throw new Error("fetch failed");
       const data = await res.json();
       return data.messages as Array<{
-        ts: string; source: string; text: string; confidence: number | null;
+        ts: string;
+        source: string;
+        text: string;
+        confidence: number | null;
       }>;
     } catch {
       return entries.map((e) => ({
@@ -53,40 +66,7 @@ export function ConversationLog({ entries, roomId }: ConversationLogProps) {
     }
   }
 
-  function fmtTime(iso: string) {
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  }
-
-  function toTxt(msgs: Array<{ ts: string; source: string; text: string; confidence: number | null }>) {
-    return msgs.map((m) => {
-      const conf = m.confidence != null ? ` (${(m.confidence * 100).toFixed(0)}%)` : "";
-      return `[${fmtTime(m.ts)}] [${m.source.toUpperCase()}] ${m.text}${conf}`;
-    }).join("\n");
-  }
-
-  function toMd(msgs: Array<{ ts: string; source: string; text: string; confidence: number | null }>) {
-    const header = `# SignLearn Transcript\nRoom: ${roomId}  \nExported: ${new Date().toLocaleString()}\n\n---\n\n`;
-    const body = msgs
-      .map((m) => {
-        const speaker = m.source === "sign" ? "🤟 Signer" : "🗣 Hearing";
-        const conf = m.confidence != null ? ` *(${(m.confidence * 100).toFixed(0)}%)*` : "";
-        return `**${speaker}** — ${fmtTime(m.ts)}${conf}\n> ${m.text}`;
-      }).join("\n\n");
-    return header + body;
-  }
-
-  function toCsv(msgs: Array<{ ts: string; source: string; text: string; confidence: number | null }>) {
-    const header = "timestamp,source,text,confidence\n";
-    const rows = msgs.map((m) => {
-      const conf = m.confidence != null ? m.confidence.toFixed(4) : "";
-      const text = `"${m.text.replace(/"/g, '""')}"`;
-      return `${m.ts},${m.source},${text},${conf}`;
-    }).join("\n");
-    return header + rows;
-  }
-
   async function doExport(format: ExportFormat) {
-    setMenuOpen(false);
     const msgs = await fetchMessages();
     if (!msgs.length) return;
 
@@ -95,15 +75,34 @@ export function ConversationLog({ entries, roomId }: ConversationLogProps) {
     let ext: string;
 
     if (format === "md") {
-      content = toMd(msgs as never);
+      const header = `# SignLearn Transcript\nRoom: ${roomId}  \nExported: ${new Date().toLocaleString()}\n\n---\n\n`;
+      content = header + msgs
+        .map((m) => {
+          const speaker = m.source === "sign" ? "Signer" : "Hearing";
+          const conf = m.confidence != null ? ` *(${(m.confidence * 100).toFixed(0)}%)*` : "";
+          return `**${speaker}** — ${fmtTime(m.ts)}${conf}\n> ${m.text}`;
+        })
+        .join("\n\n");
       mime = "text/markdown";
       ext = "md";
     } else if (format === "csv") {
-      content = toCsv(msgs);
+      const header = "timestamp,source,text,confidence\n";
+      content = header + msgs
+        .map((m) => {
+          const conf = m.confidence != null ? m.confidence.toFixed(4) : "";
+          const text = `"${m.text.replace(/"/g, '""')}"`;
+          return `${m.ts},${m.source},${text},${conf}`;
+        })
+        .join("\n");
       mime = "text/csv";
       ext = "csv";
     } else {
-      content = toTxt(msgs);
+      content = msgs
+        .map((m) => {
+          const conf = m.confidence != null ? ` (${(m.confidence * 100).toFixed(0)}%)` : "";
+          return `[${fmtTime(m.ts)}] [${m.source.toUpperCase()}] ${m.text}${conf}`;
+        })
+        .join("\n");
       mime = "text/plain";
       ext = "txt";
     }
@@ -120,89 +119,73 @@ export function ConversationLog({ entries, roomId }: ConversationLogProps) {
   if (entries.length === 0) return null;
 
   return (
-    <div className="conv-log">
-      <div className="conv-log-header">
-        <span className="conv-log-heading">Conversation</span>
-        <div style={{ position: "relative" }}>
-          <button
-            className="conv-log-export"
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            aria-label="Export transcript"
-          >
-            ⬇ Export ▾
-          </button>
-          {menuOpen && (
-            <div
-              role="menu"
-              style={menuStyles.dropdown}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {(["txt", "md", "csv"] as ExportFormat[]).map((fmt) => (
-                <button
-                  key={fmt}
-                  role="menuitem"
-                  onClick={() => doExport(fmt)}
-                  style={menuStyles.item}
-                >
-                  {fmt === "txt" && "Plain text (.txt)"}
-                  {fmt === "md" && "Markdown (.md)"}
-                  {fmt === "csv" && "Spreadsheet (.csv)"}
-                </button>
-              ))}
-            </div>
-          )}
+    <section
+      aria-label="Conversation transcript"
+      className="border-t border-[var(--color-border)] bg-[var(--color-surface)]"
+    >
+      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2">
+        <div className="inline-flex items-center gap-2">
+          <History className="size-4 text-[var(--color-text-muted)]" aria-hidden />
+          <span className="eyebrow">Conversation</span>
+          <Badge tone="neutral" className="text-[0.65rem]">
+            {entries.length}
+          </Badge>
         </div>
-      </div>
-      <div className="conv-log-entries" role="log" aria-live="polite">
-        {entries.map((entry) => (
-          <div key={entry.id} className={`conv-entry conv-entry--${entry.source}`}>
-            <span className="conv-entry-icon" aria-hidden="true">
-              {entry.source === "sign" ? "🤟" : "🗣"}
-            </span>
-            <span className="conv-entry-text">{entry.text}</span>
-            {entry.confidence != null && (
-              <span className="conv-entry-conf">
-                {(entry.confidence * 100).toFixed(0)}%
-              </span>
-            )}
-            <span className="conv-entry-time">
-              {new Date(entry.ts).toLocaleTimeString([], {
-                hour: "2-digit", minute: "2-digit", second: "2-digit",
-              })}
-            </span>
-          </div>
-        ))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm">
+              <Download className="size-4" aria-hidden /> Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Export transcript</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => doExport("txt")}>Plain text (.txt)</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => doExport("md")}>Markdown (.md)</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => doExport("csv")}>Spreadsheet (.csv)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+
+      <div
+        role="log"
+        aria-live="polite"
+        className="flex max-h-[200px] flex-col gap-1.5 overflow-y-auto px-4 py-3"
+      >
+        {entries.map((entry) => {
+          const isSign = entry.source === "sign";
+          const Icon = isSign ? Hand : Mic;
+          return (
+            <div
+              key={entry.id}
+              className={cn(
+                "flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-1.5",
+                isSign
+                  ? "bg-[var(--color-brand-subtle)]"
+                  : "bg-[var(--color-surface-sunken)]",
+              )}
+            >
+              <Icon
+                className={cn(
+                  "size-3.5 shrink-0",
+                  isSign ? "text-[var(--color-brand)]" : "text-[var(--color-text-muted)]",
+                )}
+                aria-hidden
+              />
+              <span className="flex-1 text-sm text-[var(--color-text)]">{entry.text}</span>
+              {entry.confidence != null && (
+                <span className="font-mono text-xs text-[var(--color-text-muted)]">
+                  {(entry.confidence * 100).toFixed(0)}%
+                </span>
+              )}
+              <time className="font-mono text-xs text-[var(--color-text-faint)]">
+                {fmtTime(entry.ts)}
+              </time>
+            </div>
+          );
+        })}
         <div ref={bottomRef} />
       </div>
-    </div>
+    </section>
   );
 }
-
-const menuStyles: Record<string, React.CSSProperties> = {
-  dropdown: {
-    position: "absolute",
-    right: 0,
-    top: "calc(100% + 4px)",
-    background: "var(--bg-card)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius)",
-    boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
-    display: "flex",
-    flexDirection: "column",
-    minWidth: 180,
-    zIndex: 50,
-    overflow: "hidden",
-  },
-  item: {
-    padding: "0.55rem 0.85rem",
-    background: "transparent",
-    border: "none",
-    textAlign: "left",
-    color: "var(--text)",
-    fontSize: "0.85rem",
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-};

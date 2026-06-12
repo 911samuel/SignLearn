@@ -25,8 +25,16 @@ data/processed/
 data/external/
 
 # ── Runtime artifacts (generated, not tracked) ────────────────────────────────
-artifacts/
+# `artifacts/*` (not `artifacts/`) so git walks the dir and the negations below
+# can re-include individual production-served files.  A parent directory ignore
+# rule can't be undone — only its contents can.
+artifacts/*
 !artifacts/.gitkeep
+!artifacts/label_map.json
+!artifacts/checkpoints/
+artifacts/checkpoints/*
+!artifacts/checkpoints/tcn_best.onnx
+!artifacts/checkpoints/tcn_best.classes.json
 
 # ── Test / CI caches ─────────────────────────────────────────────────────────
 .pytest_cache/

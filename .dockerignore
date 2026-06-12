@@ -1,0 +1,26 @@
+# Anything not explicitly COPY'd into the image — keep build context small.
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+notebooks/
+data/
+frontend/
+artifacts/runs/
+artifacts/reports/
+artifacts/*.sqlite
+artifacts/checkpoints/*
+!artifacts/checkpoints/tcn_best.onnx
+!artifacts/checkpoints/tcn_best.classes.json
+docs/
+!docs/vocabulary.md
+configs/
+*.md
+!docs/vocabulary.md
+.DS_Store
+node_modules/
+models/

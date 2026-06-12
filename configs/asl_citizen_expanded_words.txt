@@ -1,0 +1,99 @@
+# Expanded ASL Citizen demo vocabulary — additions on top of the original 30.
+# Each gloss has ≥25 clips and ≥20 distinct signers in ASL Citizen.
+# After extraction + training we'll curate based on actual per-class test accuracy.
+
+# Original 30 classes
+HELLO
+THANKYOU
+PLEASE
+YES
+NO
+HELP
+SORRY
+BYE
+GOOD
+BAD
+OK
+NAME
+YOU
+ME
+HOW1
+WHAT1
+WHERE
+WHEN
+WHY
+WELCOME1
+UNDERSTAND
+AGAIN
+NICE
+MEET
+FINE1
+EAT1
+WANT1
+NEED
+MORE
+STOP
+
+# Verbs (20)
+DRINK1
+GO
+COME
+SEE
+HEAR1
+TALK1
+THINK
+KNOW
+LEARN
+READ
+WRITE
+SLEEP
+WORK
+PLAY
+GIVE
+TAKE
+FIND
+OPEN
+CLOSE
+FINISH
+
+# Nouns — people, places, things (15)
+WATER
+HOME
+SCHOOL
+HOSPITAL1
+DOCTOR1
+FAMILY
+FRIEND
+MOTHER
+FATHER
+BOOK
+PHONE
+TIME
+DEAF1
+HEARING
+LANGUAGE
+
+# Adjectives & states (10)
+HAPPY
+SAD
+TIRED
+SICK
+HUNGRY
+BIG
+SMALL
+HOT
+COLD
+NEW
+
+# Time (5)
+TODAY
+TOMORROW
+YESTERDAY
+MORNING
+NIGHT1
+
+# Question words + responses (4)
+WHO
+WHICH
+MAYBE
+CONGRATULATIONS

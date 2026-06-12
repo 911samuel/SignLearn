@@ -17,6 +17,7 @@ from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions
 # ---------------------------------------------------------------------------
 
 from backend.data.constants import FEATURE_DIM, HAND_DIM, SEQUENCE_LEN
+from backend.data.label_map import resolve_label
 
 SEQUENCE_LENGTH = SEQUENCE_LEN   # backward-compat alias used in to_sequence()
 LANDMARK_DIM    = HAND_DIM       # 63 — per-hand feature width
@@ -209,6 +210,9 @@ def process_dataset(
     _ARTIFACTS.mkdir(parents=True, exist_ok=True)
     failure_log = _ARTIFACTS / "extract_failures.log"
 
+    from backend.data.label_map import load_label_map
+    _vocab = set(load_label_map().keys())
+
     class_dirs = sorted(d for d in raw_dir.iterdir() if d.is_dir())
     if class_filter:
         class_dirs = [d for d in class_dirs if d.name in class_filter]
@@ -216,7 +220,9 @@ def process_dataset(
     tasks: list[tuple] = []
 
     for cls_dir in class_dirs:
-        label = cls_dir.name
+        label = resolve_label(cls_dir.name)
+        if label not in _vocab:
+            continue  # skip non-vocabulary dirs (del, nothing, space, etc.)
         images = sorted(cls_dir.glob("*.[Jj][Pp][Gg]")) + \
                  sorted(cls_dir.glob("*.[Pp][Nn][Gg]"))
 

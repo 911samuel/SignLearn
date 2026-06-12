@@ -8,6 +8,7 @@ import tensorflow as tf
 
 from backend.data.augment import random_augment
 from backend.data.constants import FEATURE_DIM, SEQUENCE_LEN
+from backend.data.features import apply_feature_mode, output_dim
 from backend.data.label_map import load_label_map, resolve_label
 from backend.data.normalize import TWO_HAND_DIM, normalize_sequence
 
@@ -71,6 +72,8 @@ def build_dataset(
     augment: bool = False,
     shuffle: bool | None = None,
     processed_dir: Path | None = None,
+    feature_mode: str = "raw",
+    augment_probs: dict | None = None,
 ) -> tf.data.Dataset:
     """Build a tf.data.Dataset for a given split.
 
@@ -114,18 +117,40 @@ def build_dataset(
 
     dataset = dataset.map(_load_and_normalize, num_parallel_calls=tf.data.AUTOTUNE)
 
+    # Cache loaded+normalized sequences in memory so subsequent epochs avoid
+    # disk I/O and Python overhead.  For train with augmentation the cache sits
+    # *before* augmentation so each epoch still receives fresh random transforms.
+    # Skip caching when augmentation is off and the split is train (not needed)
+    # but always cache val/test since those datasets never change.
+    _should_cache = (split != "train") or augment
+    if _should_cache:
+        dataset = dataset.cache()
+
     if augment:
         _rng = np.random.default_rng()
 
         def _augment(seq: tf.Tensor, label: tf.Tensor):
             def _py_aug(s):
                 arr = s if isinstance(s, np.ndarray) else s.numpy()
-                return random_augment(arr, rng=_rng)
+                return random_augment(arr, rng=_rng, probs=augment_probs)
             aug = tf.numpy_function(_py_aug, [seq], tf.float32)
             aug.set_shape([SEQUENCE_LEN, TWO_HAND_DIM])
             return aug, label
 
         dataset = dataset.map(_augment, num_parallel_calls=tf.data.AUTOTUNE)
+
+    if feature_mode != "raw":
+        feat_dim = output_dim(feature_mode)
+
+        def _feature_map(seq: tf.Tensor, label: tf.Tensor):
+            def _py_feat(s):
+                arr = s if isinstance(s, np.ndarray) else s.numpy()
+                return apply_feature_mode(arr, feature_mode)
+            feat = tf.numpy_function(_py_feat, [seq], tf.float32)
+            feat.set_shape([SEQUENCE_LEN, feat_dim])
+            return feat, label
+
+        dataset = dataset.map(_feature_map, num_parallel_calls=tf.data.AUTOTUNE)
 
     do_shuffle = (split == "train") if shuffle is None else shuffle
     if do_shuffle:

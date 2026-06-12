@@ -58,17 +58,40 @@ def _default_num_classes() -> int:
         return 1
 
 
+def _load_yaml(path: Path) -> dict:
+    """Lazy yaml import — keeps yaml an optional dep for callers that never use it."""
+    import yaml  # type: ignore[import-untyped]
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+
+
 @dataclass
 class TrainConfig:
-    """Hyperparameters for the Phase 2 LSTM."""
+    """Hyperparameters for the SignLearn sequence classifier.
+
+    ``arch_name`` selects which architecture builder to use from
+    :data:`backend.model.architectures.ARCHITECTURE_REGISTRY`. ``feature_mode``
+    controls the engineered-feature stack in :mod:`backend.data.features`; when
+    not ``"raw"`` the model input width grows accordingly via
+    :func:`backend.data.features.output_dim`.
+    """
 
     input_shape: tuple[int, int] = (SEQUENCE_LEN, FEATURE_DIM)
     num_classes: int = field(default_factory=_default_num_classes)
+
+    arch_name: str = "lstm"
+    feature_mode: str = "raw"
 
     lstm_units: tuple[int, int] = (128, 64)
     dense_units: int = 64
     dropout: float = 0.4
     recurrent_dropout: float = 0.2
+
+    # Transformer-specific knobs (ignored by LSTM/BiLSTM builders).
+    transformer_layers: int = 2
+    transformer_heads: int = 4
+    transformer_d_model: int = 128
+    transformer_ff_dim: int = 256
 
     learning_rate: float = 1e-3
     batch_size: int = 32
@@ -80,3 +103,22 @@ class TrainConfig:
     min_lr: float = 1e-6
 
     seed: int = 42
+
+    @classmethod
+    def from_yaml(cls, path: Path | str) -> "TrainConfig":
+        """Load a TrainConfig from a YAML file.
+
+        Unknown keys are silently ignored so YAML files can carry extra
+        sweep-only metadata (eg. ``run_name``, ``notes``) without breaking
+        the dataclass constructor. Known scalar fields are coerced to the
+        dataclass's annotated types where possible.
+        """
+        data = _load_yaml(Path(path))
+        allowed = {f.name for f in cls.__dataclass_fields__.values()}
+        kwargs = {k: v for k, v in data.items() if k in allowed}
+        # tuple coercions for fields the dataclass declares as tuples
+        if isinstance(kwargs.get("lstm_units"), list):
+            kwargs["lstm_units"] = tuple(kwargs["lstm_units"])
+        if isinstance(kwargs.get("input_shape"), list):
+            kwargs["input_shape"] = tuple(kwargs["input_shape"])
+        return cls(**kwargs)

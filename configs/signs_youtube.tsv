@@ -1,0 +1,26 @@
+# YouTube source clips for words missing from WLASL.
+# Format (TAB-separated):
+#   gloss   url   signer_tag   start_sec   end_sec
+#
+# Tips for finding good clips:
+#   - Search "ASL <word>" on YouTube.
+#   - Best channels (clear single-word demos, single signer, frontal view):
+#       * Bill Vicars / Lifeprint        — search "Bill Vicars <word>"
+#       * Dr. Bill Vicars (ASL University)
+#       * Signing Savvy                  — most have free public previews
+#       * Signed With Heart
+#       * ASL Meredith
+#   - signer_tag: use the channel name in lowercase, no spaces (e.g. lifeprint,
+#     signingsavvy, aslmeredith). The extractor splits by signer_tag so the
+#     same signer never appears in both train and test.
+#   - start/end in seconds. Watch the video; pick a ~2-3 second window that
+#     covers just the sign itself (no intro / outro / repetition).
+#   - Aim for 5-10 clips per gloss across at least 2-3 different signer_tags.
+#
+# Lines starting with # are ignored. Delete this header block when you start
+# adding real URLs, or keep it — the extractor skips comment lines either way.
+#
+# Example rows (replace with real URLs once you've sourced them):
+# hello	https://www.youtube.com/watch?v=YourVideoIdHere	lifeprint	4	7
+# hello	https://www.youtube.com/watch?v=AnotherVideoId	signingsavvy	1	4
+# thank_you	https://www.youtube.com/watch?v=Another	lifeprint	5	8

@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 
 interface RemoteVideoProps {
   stream: MediaStream | null;
   muted?: boolean;
   style?: React.CSSProperties;
+  className?: string;
 }
 
-export function RemoteVideo({ stream, muted = false, style }: RemoteVideoProps) {
+export function RemoteVideo({ stream, muted = false, style, className }: RemoteVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -26,7 +28,8 @@ export function RemoteVideo({ stream, muted = false, style }: RemoteVideoProps) 
       autoPlay
       playsInline
       muted={muted}
-      style={{ width: "100%", borderRadius: 8, background: "#000", ...style }}
+      className={cn("block w-full bg-black", className)}
+      style={style}
     />
   );
 }

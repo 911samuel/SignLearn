@@ -1,0 +1,19 @@
+# Phase 3 sweep — find the best arch × feature_mode × hyperparam combination
+# to cross the 95% val_acc / 92% F1 thresholds.
+#
+# Run: python backend/scripts/sweep.py --config configs/sweeps/phase3.yaml
+#
+# 4 archs × 2 features × 2 LRs × 2 dropouts = 32 experiments.
+# At ~45 min/run on CPU with 100 epochs + early stopping, that's ~24 hrs total.
+# For an overnight smoke test reduce epochs to 25 (see phase3_smoke.yaml).
+
+sweep_id: phase3
+
+epochs: 100
+batch_size: 32
+
+grid:
+  arch:         [bilstm, tcn, cnn_bilstm, conformer_lite]
+  feature_mode: [raw+velocity, engineered]
+  learning_rate: [1.0e-3, 5.0e-4]
+  dropout:       [0.3, 0.4]

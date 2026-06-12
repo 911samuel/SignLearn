@@ -1,0 +1,13 @@
+# Phase 3 smoke sweep — quick sanity check (~3-4 hrs on CPU).
+# Use to validate the harness end-to-end before launching the full sweep.
+
+sweep_id: phase3-smoke
+
+epochs: 25
+batch_size: 32
+
+grid:
+  arch:         [bilstm, tcn, cnn_bilstm, conformer_lite]
+  feature_mode: [engineered]
+  learning_rate: [1.0e-3]
+  dropout:       [0.4]

@@ -72,9 +72,11 @@ def inverse_label_map() -> dict[int, str]:
 
 # Aliases for raw class-directory names that differ from vocabulary labels.
 # Digit directories are stored as "0"-"9" but the vocabulary uses "zero"-"nine".
+# Alphabet Kaggle dataset has uppercase dirs "A"-"Z"; vocabulary uses lowercase.
 _RAW_ALIASES: dict[str, str] = {
     "0": "zero", "1": "one",   "2": "two",   "3": "three", "4": "four",
     "5": "five", "6": "six",   "7": "seven", "8": "eight", "9": "nine",
+    **{chr(c): chr(c + 32) for c in range(ord("A"), ord("Z") + 1)},
 }
 
 

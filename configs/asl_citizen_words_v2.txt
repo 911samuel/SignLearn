@@ -1,0 +1,35 @@
+# Expansion vocabulary v2 — 25 high-value conversational additions
+# verified earlier to have ≥25 clips and ≥20 distinct signers in ASL Citizen.
+# Will be combined with the existing 42-class production set during training.
+
+DRINK1
+COFFEE
+TEA
+
+WORK
+SCHOOL
+HOSPITAL1
+DOCTOR1
+TEACHER
+INTERPRETER
+
+FRIEND
+MOTHER
+FATHER
+
+HAPPY
+ANGRY
+SCARED
+
+KNOW
+REMEMBER1
+LIKE
+LOVE
+MAYBE
+
+MORNING
+BEFORE
+AFTER
+
+WAIT
+TRY
