@@ -1,0 +1,54 @@
+# 49-word meeting vocab — derived from meeting54 by dropping classes
+# that scored poorly across BOTH v1 (78.5% run) and v2 (75.1% run):
+# Dropped: happy, sick, new, try.  All <50% in both runs and not
+# critical for meeting communication (vs what/time/work which are
+# weak but essential and retained).
+yes
+no
+ok
+maybe
+who
+what1
+where
+when
+why
+how1
+which
+hello
+bye
+welcome1
+sorry
+please
+need
+see
+think
+understand
+help
+go
+work
+find
+today
+tomorrow
+yesterday
+time
+again
+more
+good
+sad
+tired
+angry
+big
+small
+hot
+cold
+family
+friend
+mother
+name
+home
+school
+hospital1
+water
+coffee
+phone
+eat1
