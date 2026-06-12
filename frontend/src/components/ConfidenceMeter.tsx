@@ -28,7 +28,20 @@ export function ConfidenceMeter({
 
   const [correcting, setCorrecting] = useState(false);
   const [correction, setCorrection] = useState("");
+  const [flashing, setFlashing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Trigger glow animation when a sign is newly committed.
+  const prevCommitted = useRef(false);
+  useEffect(() => {
+    if (committed && !prevCommitted.current) {
+      setFlashing(false);
+      // Force re-mount of animation by toggling off then on.
+      requestAnimationFrame(() => setFlashing(true));
+    }
+    if (!committed) setFlashing(false);
+    prevCommitted.current = committed;
+  }, [committed]);
 
   // Close the correction form whenever a new label arrives.
   const prevLabel = useRef(label);
@@ -71,6 +84,7 @@ export function ConfidenceMeter({
     >
       <div style={styles.topRow}>
         <span
+          className={flashing ? "sl-commit-flash" : undefined}
           style={{
             ...styles.predLabel,
             color: committed ? "var(--accent)" : "var(--text-muted)",

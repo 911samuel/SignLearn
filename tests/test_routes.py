@@ -40,6 +40,74 @@ def test_health(client):
     assert body["sequence_len"] == 30
     assert body["feature_dim"] == 126
     assert body["model_loaded"] is False
+    assert "uptime_seconds" in body
+    assert isinstance(body["uptime_seconds"], float)
+
+
+# ---------------------------------------------------------------------------
+# /metrics
+# ---------------------------------------------------------------------------
+
+def test_metrics_prometheus_format(client):
+    resp = client.get("/metrics")
+    assert resp.status_code == 200
+    ct = resp.content_type
+    assert "text/plain" in ct
+    data = resp.get_data(as_text=True)
+    assert "signlearn_predictions_total" in data
+    assert "signlearn_inference_latency_ms" in data
+
+
+def test_metrics_json_format(client):
+    resp = client.get("/metrics?format=json")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert "predictions_total" in body
+    assert "no_hand_frames_total" in body
+
+
+# ---------------------------------------------------------------------------
+# /admin/reload
+# ---------------------------------------------------------------------------
+
+def test_admin_reload_disabled_without_token(client, monkeypatch):
+    """Returns 403 when SIGNLEARN_ADMIN_TOKEN is not set."""
+    monkeypatch.delenv("SIGNLEARN_ADMIN_TOKEN", raising=False)
+    resp = client.post("/admin/reload", json={"path": "some/path.keras"})
+    assert resp.status_code == 403
+
+
+def test_admin_reload_rejects_wrong_token(client, monkeypatch):
+    monkeypatch.setenv("SIGNLEARN_ADMIN_TOKEN", "secret-token")
+    resp = client.post(
+        "/admin/reload",
+        json={"path": "some/path.keras"},
+        headers={"X-Admin-Token": "wrong-token"},
+    )
+    assert resp.status_code == 401
+
+
+def test_admin_reload_requires_path(client, monkeypatch):
+    monkeypatch.setenv("SIGNLEARN_ADMIN_TOKEN", "tok")
+    resp = client.post(
+        "/admin/reload",
+        json={},
+        headers={"X-Admin-Token": "tok"},
+    )
+    assert resp.status_code == 400
+    assert "path" in resp.get_json()["error"]
+
+
+def test_admin_reload_nonexistent_file_returns_503(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("SIGNLEARN_ADMIN_TOKEN", "tok")
+    resp = client.post(
+        "/admin/reload",
+        json={"path": str(tmp_path / "nonexistent.keras")},
+        headers={"X-Admin-Token": "tok"},
+    )
+    assert resp.status_code == 503
+    body = resp.get_json()
+    assert body["status"] == "error"
 
 
 # ---------------------------------------------------------------------------

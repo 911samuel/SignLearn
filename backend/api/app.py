@@ -10,6 +10,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from backend.api.config import CONFIG
+from backend.api.errors import register_error_handlers
 from backend.api.routes import bp as api_bp
 from backend.api import socket_handlers
 
@@ -36,6 +37,7 @@ def create_app() -> tuple[Flask, SocketIO]:
     app.config["SECRET_KEY"] = secret
     CORS(app, origins=list(CONFIG.cors_origins))
     app.register_blueprint(api_bp)
+    register_error_handlers(app)
 
     socketio = SocketIO(
         app,

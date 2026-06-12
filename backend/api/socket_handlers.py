@@ -28,15 +28,34 @@ from flask import request
 from flask_socketio import SocketIO, emit, join_room as sio_join_room, leave_room as sio_leave_room
 
 from backend.api import storage
+from backend.api.errors import LandmarkValidationError, ModelNotReadyError, SignLearnError
 from backend.api.inference import FrameBuffer
 from backend.api.rooms import STORE
 
 # One FrameBuffer per connected Signer, keyed by session ID.
 _buffers: dict[str, FrameBuffer] = {}
 
+# Last-active timestamp per session for idle TTL eviction.
+_last_active: dict[str, float] = {}
+_IDLE_TTL_SECS = 300.0  # evict FrameBuffers idle for 5 min (belt-and-suspenders)
+
 # Debounce state: last (label, timestamp) written to DB per connection.
 _last_written: dict[str, tuple[str, float]] = {}
 _DEBOUNCE_SECS = 1.0
+
+
+def _evict_idle_buffers() -> None:
+    """Remove FrameBuffers that haven't received a frame for _IDLE_TTL_SECS.
+
+    Called on every incoming frame to amortize the cost.  Without this,
+    clients that close the tab without a clean WS close would leak memory.
+    """
+    now = time.monotonic()
+    stale = [sid for sid, ts in _last_active.items() if (now - ts) > _IDLE_TTL_SECS]
+    for sid in stale:
+        _buffers.pop(sid, None)
+        _last_active.pop(sid, None)
+        _last_written.pop(sid, None)
 
 
 def _maybe_log(sid: str, room_id: str, label: str, confidence: float) -> None:
@@ -68,6 +87,7 @@ def register(socketio: SocketIO) -> None:
         sid = request.sid
         _buffers.pop(sid, None)
         _last_written.pop(sid, None)
+        _last_active.pop(sid, None)
         room = STORE.remove_member(sid)
         if room is not None:
             _broadcast_room_state(socketio, room.id)
@@ -132,9 +152,22 @@ def register(socketio: SocketIO) -> None:
         if buf is None:
             buf = _buffers[sid] = FrameBuffer()
 
+        # Update last-active and opportunistically evict idle sessions.
+        _last_active[sid] = time.monotonic()
+        _evict_idle_buffers()
+
         try:
             result = buf.push(data["landmarks"])
-        except RuntimeError:
+        except ModelNotReadyError as exc:
+            emit("prediction", {
+                "label": None, "confidence": None, "ready": False,
+                "error": exc.error_code,
+            })
+            return
+        except (LandmarkValidationError, SignLearnError) as exc:
+            emit("error", {"message": exc.message, "code": exc.error_code})
+            return
+        except RuntimeError as exc:
             emit("prediction", {
                 "label": None, "confidence": None, "ready": False,
                 "error": "model_not_loaded",
@@ -166,6 +199,72 @@ def register(socketio: SocketIO) -> None:
         if buf is not None:
             buf.reset()
         emit("reset_ack", {})
+
+    # ------------------------------------------------------------------
+    # Word capture (hold-to-sign)
+    #
+    # Client buffers 80 frames locally during a hold gesture and sends the
+    # complete (80, 126) sequence in a single 'word_predict' event. Server
+    # runs the focused word model and returns top-3 candidates so the UI can
+    # surface a pick-from-suggestions affordance (top-5 acc of the word model
+    # is 98.8% so this is the high-confidence path).
+    # ------------------------------------------------------------------
+
+    @socketio.on("word_predict")
+    def on_word_predict(data: dict):
+        import numpy as np
+        from backend.api.model_loader import run_word_inference_probs, get_word_class_names
+        from backend.data.normalize import normalize_sequence
+
+        sid = request.sid
+        room = STORE.room_for_sid(sid)
+        if room is None:
+            return
+        member = room.members.get(sid)
+        if member is None or member.role != "signer":
+            return
+
+        try:
+            frames = data.get("frames") or []
+            arr = np.asarray(frames, dtype=np.float32)
+            if arr.ndim != 2 or arr.shape[1] != 126:
+                emit("word_prediction", {"error": "expected (T, 126) frames"})
+                return
+            # Pad or center-crop to 80 frames
+            T = arr.shape[0]
+            if T < 10:
+                emit("word_prediction", {"error": "too few frames (need ≥10)"})
+                return
+            if T >= 80:
+                start = (T - 80) // 2
+                arr = arr[start:start + 80]
+            else:
+                pad = np.zeros((80 - T, 126), dtype=np.float32)
+                arr = np.concatenate([arr, pad], axis=0)
+            normalized = normalize_sequence(arr)
+            probs = run_word_inference_probs(normalized)
+            names = get_word_class_names()
+            top_idx = np.argsort(probs)[::-1][:3]
+            top3 = [
+                {"label": names[int(i)], "confidence": float(probs[int(i)])}
+                for i in top_idx if int(i) < len(names)
+            ]
+        except Exception as exc:  # noqa: BLE001
+            emit("word_prediction", {"error": f"{type(exc).__name__}: {exc}"})
+            return
+
+        if top3:
+            best = top3[0]
+            socketio.emit("caption", {
+                "source": "sign",
+                "text": best["label"],
+                "confidence": best["confidence"],
+                "name": member.name,
+                "ts": int(time.time() * 1000),
+                "mode": "word",
+                "candidates": top3,
+            }, to=room.id)
+        emit("word_prediction", {"top3": top3})
 
     # ------------------------------------------------------------------
     # Speech captions

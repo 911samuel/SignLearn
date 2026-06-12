@@ -1,16 +1,20 @@
-"""Phase 2 — Subtask 3: Train the stacked LSTM on present ASL classes.
+"""Phase 2/5 — Train a SignLearn sequence classifier.
+
+Supports multiple architectures via :data:`backend.model.architectures.ARCHITECTURE_REGISTRY`.
 
 Usage
 -----
-python backend/scripts/train_model.py                         # default config
-python backend/scripts/train_model.py --epochs 50 --batch-size 16
-python backend/scripts/train_model.py --data-dir data/processed --out-dir artifacts
+python backend/scripts/train_model.py                                       # baseline LSTM
+python backend/scripts/train_model.py --arch bilstm --run-name bilstm-v1
+python backend/scripts/train_model.py --arch transformer --run-name tx-v1 --epochs 80
+python backend/scripts/train_model.py --feature-mode raw+velocity --run-name lstm-vel
 """
 
 import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 import tensorflow as tf
@@ -18,21 +22,45 @@ import tensorflow as tf
 _REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
+from backend.data.augment import TRAINING_PROBS
 from backend.data.dataset import build_dataset
+from backend.data.features import output_dim
 from backend.data.label_map import load_label_map
-from backend.model.architecture import build_lstm
+from backend.model.architectures import build as build_arch
 from backend.model.config import (
     ARTIFACTS_DIR,
     CHECKPOINTS_DIR,
+    FEATURE_DIM,
     LOGS_DIR,
     PROCESSED_DIR,
     REPORTS_DIR,
+    SEQUENCE_LEN,
     TrainConfig,
     compact_label_map,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 _log = logging.getLogger(__name__)
+
+
+def _compute_class_weights(processed_dir: Path, cmap: dict[int, int]) -> dict[int, float]:
+    """Return inverse-frequency class weights keyed by compact label index."""
+    import numpy as np
+    from backend.data.dataset import list_split
+    counts: dict[int, int] = {}
+    for full_idx in cmap:
+        counts[full_idx] = 0
+    for _, label_idx in list_split("train", processed_dir=processed_dir):
+        if label_idx in counts:
+            counts[label_idx] += 1
+    n_total = sum(counts.values())
+    n_classes = len(counts)
+    weights = {}
+    for full_idx, compact_idx in cmap.items():
+        c = counts.get(full_idx, 1)
+        w = n_total / (n_classes * max(c, 1))
+        weights[compact_idx] = min(w, 5.0)  # cap at 5× to avoid gradient instability
+    return weights
 
 
 def _remap_labels(ds: tf.data.Dataset, cmap: dict[int, int]) -> tf.data.Dataset:
@@ -54,9 +82,6 @@ def _remap_labels(ds: tf.data.Dataset, cmap: dict[int, int]) -> tf.data.Dataset:
 
     def _map(seq, label):
         new_label = lookup.lookup(label)
-        # Fail loudly if a split contains a label not present in the compact map.
-        # This catches the case where val/test has classes absent from train,
-        # which would otherwise silently feed -1 into the loss.
         tf.debugging.assert_greater_equal(
             new_label, 0,
             message="_remap_labels: encountered label not in compact map",
@@ -66,15 +91,44 @@ def _remap_labels(ds: tf.data.Dataset, cmap: dict[int, int]) -> tf.data.Dataset:
     return ds.map(_map, num_parallel_calls=tf.data.AUTOTUNE)
 
 
-def train(config: TrainConfig, data_dir: Path, out_dir: Path) -> dict:
-    """Run training and return the history dict."""
+def _run_dirs(out_dir: Path, run_name: str | None) -> tuple[Path, Path, Path]:
+    """Return (checkpoints, logs, reports) directories for this run.
+
+    Without ``run_name`` the layout matches the legacy Phase 2 expectation:
+    ``<out_dir>/{checkpoints,logs,reports}``. With a ``run_name`` everything
+    is nested under ``<out_dir>/runs/<run_name>/`` so multiple experiments can
+    coexist.
+    """
+    if run_name:
+        root = out_dir / "runs" / run_name
+    else:
+        root = out_dir
+    ck = root / "checkpoints"
+    lg = root / "logs"
+    rp = root / "reports"
+    for d in (ck, lg, rp):
+        d.mkdir(parents=True, exist_ok=True)
+    return ck, lg, rp
+
+
+def train(
+    config: TrainConfig,
+    data_dir: Path,
+    out_dir: Path,
+    run_name: str | None = None,
+) -> dict:
+    """Run training and return the history dict.
+
+    The architecture is selected by ``config.arch_name``. Checkpoints are saved
+    as ``<arch>_best.keras`` and ``<arch>_final.keras`` so multiple architectures
+    can share an output directory without clobbering each other.
+    """
     tf.random.set_seed(config.seed)
 
     cmap = compact_label_map(processed_dir=data_dir)
-    # Always derive num_classes from the actual data_dir, not from whatever
-    # TrainConfig defaulted to at construction time (which may differ in CI or
-    # when callers pass a fixture directory).
     config.num_classes = len(cmap)
+    # Adjust the model input width if engineered features are enabled.
+    config.input_shape = (SEQUENCE_LEN, output_dim(config.feature_mode))
 
     full_vocab_size = len(load_label_map())
     if len(cmap) < full_vocab_size:
@@ -85,23 +139,26 @@ def train(config: TrainConfig, data_dir: Path, out_dir: Path) -> dict:
             len(cmap), full_vocab_size, missing, data_dir,
         )
 
-    train_ds = build_dataset("train", batch_size=config.batch_size, augment=True, processed_dir=data_dir)
-    val_ds   = build_dataset("val",   batch_size=config.batch_size, augment=False, processed_dir=data_dir)
+    train_ds = build_dataset(
+        "train", batch_size=config.batch_size, augment=True,
+        processed_dir=data_dir, feature_mode=config.feature_mode,
+        augment_probs=TRAINING_PROBS,
+    )
+    val_ds = build_dataset(
+        "val", batch_size=config.batch_size, augment=False,
+        processed_dir=data_dir, feature_mode=config.feature_mode,
+    )
 
     train_ds = _remap_labels(train_ds, cmap)
     val_ds   = _remap_labels(val_ds,   cmap)
 
-    model = build_lstm(config)
-    model.summary()
+    model = build_arch(config.arch_name, config)
+    model.summary(print_fn=_log.info)
 
-    checkpoints_dir = out_dir / "checkpoints"
-    logs_dir        = out_dir / "logs"
-    reports_dir     = out_dir / "reports"
-    for d in (checkpoints_dir, logs_dir, reports_dir):
-        d.mkdir(parents=True, exist_ok=True)
-
-    best_ckpt   = checkpoints_dir / "lstm_best.keras"
-    final_keras = checkpoints_dir / "lstm_final.keras"
+    checkpoints_dir, logs_dir, reports_dir = _run_dirs(out_dir, run_name)
+    arch = config.arch_name
+    best_ckpt   = checkpoints_dir / f"{arch}_best.keras"
+    final_keras = checkpoints_dir / f"{arch}_final.keras"
 
     callbacks = [
         tf.keras.callbacks.ModelCheckpoint(
@@ -129,13 +186,21 @@ def train(config: TrainConfig, data_dir: Path, out_dir: Path) -> dict:
         ),
     ]
 
+    class_weights = _compute_class_weights(data_dir, cmap)
+    max_w = max(class_weights.values())
+    _log.info("Class weights: min=%.2f  max=%.2f  ratio=%.1f:1",
+              min(class_weights.values()), max_w, max_w / min(class_weights.values()))
+
+    t0 = time.time()
     history = model.fit(
         train_ds,
         validation_data=val_ds,
         epochs=config.epochs,
         callbacks=callbacks,
+        class_weight=class_weights,
         verbose=1,
     )
+    elapsed = time.time() - t0
 
     model.save(str(final_keras))
     print(f"\nFinal model saved → {final_keras}")
@@ -146,32 +211,76 @@ def train(config: TrainConfig, data_dir: Path, out_dir: Path) -> dict:
         json.dump(history_dict, f, indent=2)
     print(f"Training history  → {history_path}")
 
+    # Persist run metadata so evaluate_model.py can rehydrate the same config.
+    meta = {
+        "arch_name":       config.arch_name,
+        "feature_mode":    config.feature_mode,
+        "num_classes":     config.num_classes,
+        "input_shape":     list(config.input_shape),
+        "param_count":     int(model.count_params()),
+        "batch_size":      config.batch_size,
+        "epochs_run":      len(history_dict.get("loss", [])),
+        "elapsed_seconds": round(elapsed, 2),
+        "best_val_acc":    max(history_dict.get("val_accuracy", [0.0])),
+        "best_val_loss":   min(history_dict.get("val_loss", [float("inf")])),
+        "seed":            config.seed,
+        "run_name":        run_name,
+        "best_checkpoint": str(best_ckpt),
+        "final_checkpoint": str(final_keras),
+    }
+    config_path = reports_dir / "config.json"
+    config_path.write_text(json.dumps(meta, indent=2))
+    print(f"Run metadata      → {config_path}")
+
     best_val_acc = max(history_dict.get("val_accuracy", [0]))
     best_epoch   = history_dict.get("val_accuracy", [0]).index(best_val_acc) + 1
-    print(f"\nBest val_accuracy: {best_val_acc:.4f} at epoch {best_epoch}")
+    print(f"\nBest val_accuracy: {best_val_acc:.4f} at epoch {best_epoch} "
+          f"({elapsed:.1f}s total)")
 
     return history_dict
 
 
 def _parse_args(argv=None):
-    p = argparse.ArgumentParser(description="Train SignLearn LSTM (Phase 2)")
-    p.add_argument("--epochs",      type=int,  default=None, help="Override TrainConfig.epochs")
-    p.add_argument("--batch-size",  type=int,  default=None, help="Override TrainConfig.batch_size")
-    p.add_argument("--lr",          type=float,default=None, help="Override learning rate")
-    p.add_argument("--data-dir",    type=Path, default=PROCESSED_DIR)
-    p.add_argument("--out-dir",     type=Path, default=ARTIFACTS_DIR)
+    from backend.model.architectures import ARCHITECTURE_REGISTRY
+    from backend.data.features import FEATURE_MODES
+    p = argparse.ArgumentParser(description="Train a SignLearn sequence classifier")
+    p.add_argument("--arch",         type=str,  default="lstm",
+                   choices=sorted(ARCHITECTURE_REGISTRY))
+    p.add_argument("--feature-mode", type=str,  default="raw",
+                   choices=list(FEATURE_MODES))
+    p.add_argument("--config",       type=Path, default=None,
+                   help="YAML config file (overrides individual CLI flags except --run-name)")
+    p.add_argument("--run-name",     type=str,  default=None,
+                   help="Optional subdirectory under <out-dir>/runs/ for this experiment")
+    p.add_argument("--epochs",       type=int,  default=None)
+    p.add_argument("--batch-size",   type=int,  default=None)
+    p.add_argument("--lr",           type=float,default=None)
+    p.add_argument("--dropout",      type=float,default=None)
+    p.add_argument("--seed",         type=int,  default=None,
+                   help="Override TrainConfig.seed for reproducibility runs.")
+    p.add_argument("--data-dir",     type=Path, default=PROCESSED_DIR)
+    p.add_argument("--out-dir",      type=Path, default=ARTIFACTS_DIR)
     return p.parse_args(argv)
 
 
 if __name__ == "__main__":
     args = _parse_args()
 
-    config = TrainConfig()
+    if args.config is not None:
+        config = TrainConfig.from_yaml(args.config)
+    else:
+        config = TrainConfig(arch_name=args.arch, feature_mode=args.feature_mode)
+
+    # CLI flag overrides applied on top of YAML (handy for sweep harness reruns).
     if args.epochs is not None:
         config.epochs = args.epochs
     if args.batch_size is not None:
         config.batch_size = args.batch_size
     if args.lr is not None:
         config.learning_rate = args.lr
+    if args.dropout is not None:
+        config.dropout = args.dropout
+    if args.seed is not None:
+        config.seed = args.seed
 
-    train(config, data_dir=args.data_dir, out_dir=args.out_dir)
+    train(config, data_dir=args.data_dir, out_dir=args.out_dir, run_name=args.run_name)

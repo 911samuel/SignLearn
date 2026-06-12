@@ -1,0 +1,31 @@
+# Conversational ASL words to record yourself.
+# All entries are in docs/vocabulary.md and NOT covered by WLASL extraction.
+# Record with:  make record LABEL=<word>  (or batch via record_vocabulary.py)
+# Target: 25 samples each, with --diversity-matrix.
+#
+# Priority order — top 8 are the demo-critical words. Record those first.
+hello
+thank_you
+please
+help
+sorry
+goodbye
+welcome
+excuse_me
+understand
+not_understand
+repeat
+what
+where
+when
+why
+how
+stop
+danger
+hospital
+doctor
+eat
+go
+friend
+love
+meet

@@ -1,0 +1,22 @@
+# Phase 3 sweep — raw/raw+velocity features on the balanced 36-class dataset.
+#
+# Background: engineered features (velocity+acceleration+angles+distances)
+# converge poorly on the 36-class dataset because 70% of samples are static
+# letter images where all 30 frames are identical → velocity/acceleration ≈ 0.
+# This sweep focuses on raw and raw+velocity features which carry the actual
+# hand-shape signal.
+#
+# 4 archs × 2 features × 2 LRs × 1 dropout = 16 experiments.
+# ~45 min/run on CPU with 100 epochs + early stopping → ~12 hrs total.
+# Smoke version (phase3_raw_smoke.yaml) = 4 runs × 25 epochs → ~2 hrs.
+
+sweep_id: phase3-raw-balanced
+
+epochs: 100
+batch_size: 32
+
+grid:
+  arch:         [bilstm, tcn, cnn_bilstm, conformer_lite]
+  feature_mode: [raw, raw+velocity]
+  learning_rate: [1.0e-3, 5.0e-4]
+  dropout:       [0.4]

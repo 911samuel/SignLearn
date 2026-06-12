@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Copy, DoorOpen, Hand, Mic } from "lucide-react";
 import { useRoom, type Role } from "@/hooks/useRoom";
 import { SignerView } from "@/components/SignerView";
 import { HearingView } from "@/components/HearingView";
 import { ConversationLog, type LogEntry } from "@/components/ConversationLog";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { RoomErrorBoundary } from "@/components/RoomErrorBoundary";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:5001";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { StatusPill, type Status } from "@/components/primitives/StatusPill";
+import { A11yPreferencesMenu } from "@/components/primitives/A11yPreferencesMenu";
+import { useToast } from "@/components/ui/toast";
+import { BACKEND_URL } from "@/lib/api";
 
 export default function RoomPage() {
   const params = useParams();
@@ -20,7 +26,6 @@ export default function RoomPage() {
   const role = searchParams?.get("role") as Role | null;
   const name = searchParams?.get("name") ?? "";
 
-  // Redirect to join if params are missing or invalid.
   useEffect(() => {
     if (!role || !name || (role !== "signer" && role !== "hearing")) {
       router.replace(`/r/${roomId}/join`);
@@ -41,27 +46,33 @@ export default function RoomPage() {
   );
 }
 
-interface RoomInnerProps {
+function RoomInner({
+  roomId,
+  role,
+  name,
+  onLeave,
+}: {
   roomId: string;
   role: Role;
   name: string;
   onLeave: () => void;
-}
-
-function RoomInner({ roomId, role, name, onLeave }: RoomInnerProps) {
+}) {
   const { socket, status, joinError, members, captions, emitSpeech } = useRoom(roomId, role, name);
   const [log, setLog] = useState<LogEntry[]>([]);
-
+  const { toast } = useToast();
   const peerPresent = members.some((m) => m.role !== role);
 
   useEffect(() => {
     fetch(`${BACKEND_URL}/transcript?room_id=${roomId}&limit=200`)
-      .then((r) => r.ok ? r.json() : { messages: [] })
+      .then((r) => (r.ok ? r.json() : { messages: [] }))
       .then((data) => {
         const hydrated: LogEntry[] = (
           data.messages as Array<{
-            id: number; ts: string; source: "sign" | "speech";
-            text: string; confidence: number | null;
+            id: number;
+            ts: string;
+            source: "sign" | "speech";
+            text: string;
+            confidence: number | null;
           }>
         ).map((m) => ({
           id: m.id,
@@ -72,7 +83,7 @@ function RoomInner({ roomId, role, name, onLeave }: RoomInnerProps) {
         }));
         setLog(hydrated);
       })
-      .catch((err) => console.warn("[RoomPage] transcript fetch failed:", err));
+      .catch(() => {});
   }, [roomId]);
 
   useEffect(() => {
@@ -80,49 +91,109 @@ function RoomInner({ roomId, role, name, onLeave }: RoomInnerProps) {
     const latest = captions[captions.length - 1];
     setLog((prev) => {
       if (prev.length > 0 && prev[prev.length - 1].id === latest.id) return prev;
-      return [...prev, {
-        id: latest.id,
-        source: latest.source,
-        text: latest.text,
-        confidence: latest.confidence,
-        ts: latest.ts,
-      }];
+      return [
+        ...prev,
+        {
+          id: latest.id,
+          source: latest.source,
+          text: latest.text,
+          confidence: latest.confidence,
+          ts: latest.ts,
+        },
+      ];
     });
   }, [captions]);
 
   const handlePrediction = useCallback(() => {}, []);
 
-  const handleSpeech = useCallback((text: string, ts: number) => {
-    emitSpeech(text);
-    setLog((prev) => [
-      ...prev,
-      { id: ts + Math.random(), source: "speech", text, ts },
-    ]);
-  }, [emitSpeech]);
+  const handleSpeech = useCallback(
+    (text: string, ts: number) => {
+      emitSpeech(text);
+      setLog((prev) => [...prev, { id: ts + Math.random(), source: "speech", text, ts }]);
+    },
+    [emitSpeech],
+  );
+
+  const connectionStatus: Status =
+    status === "connected" ? "ok" : status === "reconnecting" ? "processing" : "disconnected";
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(roomId);
+      toast({ tone: "success", title: "Room code copied", description: roomId });
+    } catch {
+      toast({ tone: "danger", title: "Couldn't copy", description: "Copy the code manually." });
+    }
+  }
 
   return (
-    <div style={styles.shell}>
-      <header style={styles.header}>
-        <span style={styles.brand}>◐◑ SignLearn</span>
-        <span style={styles.room}>Room <strong>{roomId}</strong></span>
-        <span style={styles.you}>You: {name} ({role})</span>
-        <span
-          style={{ ...styles.dot, background: statusColor(status) }}
-          aria-hidden="true"
-        />
-        <span style={styles.statusLabel} aria-live="polite">{statusLabel(status)}</span>
-        <ThemeToggle compact />
-        <button onClick={onLeave} style={styles.leave}>Leave</button>
+    <div className="flex min-h-screen flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
+      {/* HEADER */}
+      <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-bg)_92%,transparent)] backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-7xl flex-wrap items-center gap-3 px-4 lg:px-6">
+          <Link
+            href="/"
+            aria-label="SignLearn home"
+            className="inline-flex items-center gap-2 text-[var(--color-text)] hover:no-underline"
+          >
+            <span
+              aria-hidden
+              className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-brand)] text-[var(--color-brand-foreground)]"
+            >
+              SL
+            </span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={copyCode}
+            className="inline-flex h-9 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-sunken)] px-3 text-sm font-semibold text-[var(--color-text)] transition hover:bg-[var(--color-surface)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)]"
+            aria-label={`Copy room code ${roomId}`}
+          >
+            <span className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Room</span>
+            <code className="font-mono text-base text-[var(--color-text)]">{roomId}</code>
+            <Copy className="size-3.5 text-[var(--color-text-muted)]" aria-hidden />
+          </button>
+
+          <Badge tone={role === "signer" ? "brand" : "info"} className="text-xs">
+            {role === "signer" ? (
+              <>
+                <Hand className="size-3" aria-hidden /> Signer
+              </>
+            ) : (
+              <>
+                <Mic className="size-3" aria-hidden /> Hearing
+              </>
+            )}{" "}
+            · {name}
+          </Badge>
+
+          <div className="ml-auto flex items-center gap-2">
+            <StatusPill status={connectionStatus} />
+            <A11yPreferencesMenu />
+            <Button variant="outline" size="sm" onClick={onLeave}>
+              <DoorOpen className="size-4" aria-hidden /> Leave
+            </Button>
+          </div>
+        </div>
       </header>
 
       {joinError && (
-        <div style={styles.banner} role="alert">
+        <Alert tone="danger" title="Couldn't join this room" className="mx-4 mt-4 lg:mx-6">
           {joinError}
-          <button onClick={onLeave} style={{ ...styles.leave, marginLeft: "0.75rem" }}>Back</button>
-        </div>
+          <div className="mt-3">
+            <Button variant="secondary" size="sm" onClick={onLeave}>
+              <DoorOpen className="size-4" aria-hidden /> Back to home
+            </Button>
+          </div>
+        </Alert>
       )}
 
-      <main style={styles.main}>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex flex-1 flex-col gap-4 px-4 py-4 focus:outline-none lg:px-6"
+      >
         <RoomErrorBoundary onLeave={onLeave}>
           {role === "signer" ? (
             <SignerView
@@ -147,34 +218,3 @@ function RoomInner({ roomId, role, name, onLeave }: RoomInnerProps) {
     </div>
   );
 }
-
-function statusColor(s: string) {
-  return s === "connected" ? "var(--success)" : s === "reconnecting" ? "#ff9800" : "var(--danger)";
-}
-function statusLabel(s: string) {
-  return s === "connected" ? "Connected" : s === "reconnecting" ? "Reconnecting…" : "Disconnected";
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  shell: { minHeight: "100svh", display: "flex", flexDirection: "column" },
-  header: {
-    display: "flex", alignItems: "center", gap: "0.75rem",
-    padding: "0.6rem 1rem", borderBottom: "1px solid var(--border)",
-    background: "var(--bg-elevated)", color: "var(--text)", flexWrap: "wrap",
-  },
-  brand: { fontWeight: 700, color: "var(--accent)" },
-  room: { color: "var(--text-muted)", fontSize: "0.9rem" },
-  you: { color: "var(--text-faint)", fontSize: "0.85rem", marginRight: "auto" },
-  dot: { width: 10, height: 10, borderRadius: "50%", display: "inline-block", flexShrink: 0 },
-  statusLabel: { fontSize: "0.85rem", color: "var(--text-muted)" },
-  leave: {
-    padding: "0.4rem 0.85rem", borderRadius: 6, border: "1px solid var(--border)",
-    background: "transparent", color: "var(--text-muted)", cursor: "pointer",
-    fontFamily: "inherit", fontSize: "0.88rem",
-  },
-  banner: {
-    padding: "0.6rem 1rem", background: "var(--danger)", color: "#fff",
-    display: "flex", alignItems: "center", fontSize: "0.9rem",
-  },
-  main: { flex: 1, padding: "1rem", display: "flex", flexDirection: "column" },
-};

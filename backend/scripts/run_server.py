@@ -2,6 +2,11 @@
 
 Usage:
     python backend/scripts/run_server.py
+
+Async mode:
+    Defaults to "threading" (Werkzeug dev server + simple-websocket).
+    Set SIGNLEARN_ASYNC_MODE=eventlet to use eventlet instead (not
+    recommended — eventlet cannot green ONNX RLocks and will hang).
 """
 
 from __future__ import annotations
@@ -9,12 +14,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-
-# eventlet monkey-patch must happen before any other network imports,
-# but only when actually using eventlet (not threading mode used in tests).
-if os.environ.get("SIGNLEARN_ASYNC_MODE", "eventlet") == "eventlet":
-    import eventlet
-    eventlet.monkey_patch()
 
 # Ensure repo root is on sys.path when the script is run directly.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
