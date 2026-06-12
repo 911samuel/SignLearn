@@ -1,0 +1,25 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# After committing this file, go to render.com → New → Blueprint → point at
+# this repo.  Render will read render.yaml and provision the service.
+services:
+  - type: web
+    name: signlearn-api
+    runtime: docker
+    plan: free               # Sleeps after 15 min idle, ~30-60s cold start.
+                             # Pre-warm before any live demo by hitting the URL
+                             # ~5 min ahead.  Upgrade to `starter` ($7/mo) if
+                             # the cold-start risk becomes a problem.
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SIGNLEARN_ASYNC_MODE
+        value: gevent
+      - key: SIGNLEARN_SECRET_KEY
+        generateValue: true   # Render generates and stores a 32-byte secret.
+      - key: SIGNLEARN_ADMIN_TOKEN
+        sync: false           # Set manually in dashboard — do not commit.
+      - key: SIGNLEARN_CORS_ORIGINS
+        sync: false           # Set after you know the Vercel URL.
+      - key: SIGNLEARN_MODEL_PATH
+        value: /app/artifacts/checkpoints/tcn_best.onnx
