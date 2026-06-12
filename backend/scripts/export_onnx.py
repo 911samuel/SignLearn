@@ -38,13 +38,14 @@ def _resolve_feature_mode(keras_path: Path) -> str:
     return cfg.get("feature_mode", "raw")
 
 
-def _build_validation_batch(n: int, feature_mode: str) -> np.ndarray:
+def _build_validation_batch(n: int, feature_mode: str, seq_len: int = SEQUENCE_LEN) -> np.ndarray:
     """Sample ``n`` real validation sequences and apply the feature pipeline."""
-    items = list_split("val")
+    items = list_split("val") if seq_len == SEQUENCE_LEN else []
     if not items:
         # Fall back to synthetic noise — better than crashing the export.
+        # The word model has no letter val split; synthetic is fine for parity.
         D = output_dim(feature_mode)
-        return np.random.randn(n, SEQUENCE_LEN, D).astype(np.float32)
+        return np.random.randn(n, seq_len, D).astype(np.float32)
     idx = np.random.default_rng(seed=42).choice(len(items), size=min(n, len(items)), replace=False)
     batch = []
     for j in idx:
@@ -69,10 +70,14 @@ def export(in_path: Path, out_path: Path, opset: int, atol: float, n_samples: in
     model = tf.keras.models.load_model(str(in_path))
     print(f"Loaded {in_path.name}: input_shape={model.input_shape}, params={model.count_params():,}")
 
+    # Use the model's actual sequence length so the word model (T=80) exports
+    # correctly alongside the letter model (T=30).
+    model_seq_len = model.input_shape[1] or SEQUENCE_LEN
+
     # Dynamic batch axis so onnxruntime can serve batch>1 if we ever want to.
     spec = (
         tf.TensorSpec(
-            (None, SEQUENCE_LEN, output_dim(feature_mode)),
+            (None, model_seq_len, output_dim(feature_mode)),
             tf.float32,
             name=model.inputs[0].name.split(":")[0],
         ),
@@ -89,7 +94,7 @@ def export(in_path: Path, out_path: Path, opset: int, atol: float, n_samples: in
     # Parity check.
     from backend.api.onnx_runner import OnnxRunner
     runner = OnnxRunner(out_path)
-    batch = _build_validation_batch(n_samples, feature_mode)
+    batch = _build_validation_batch(n_samples, feature_mode, seq_len=model_seq_len)
     print(f"Parity batch: shape={batch.shape}")
 
     keras_out = model.predict(batch, verbose=0)

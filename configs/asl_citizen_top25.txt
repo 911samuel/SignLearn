@@ -1,0 +1,29 @@
+# Top 25 words selected from the 38-curated run by held-out test accuracy.
+# 16 of these scored 100% on the prior model; mean across the set was 96.3%.
+# Vocabulary chosen for both linguistic utility (conversational basics) and
+# visual distinctness in WLASL data.
+big
+bye
+close
+cold
+eat1
+family
+finish
+hearing
+hello
+home
+hot
+meet
+more
+need
+ok
+phone
+see
+thankyou
+tired
+today
+want1
+which
+who
+yes
+yesterday
