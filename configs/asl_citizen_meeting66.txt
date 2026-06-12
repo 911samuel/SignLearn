@@ -1,0 +1,91 @@
+# 60-word meeting conversation vocabulary, curated from ASL Citizen.
+# Selection criteria: (1) appears in target meeting vocab (greetings,
+# acknowledgment, question words, common verbs, time, feelings, family,
+# basic nouns), (2) has >= 10 training samples in our processed data.
+#
+# Audit summary (see docs/deployment.md and CLAUDE.md for context):
+#   - 74 of 153 target meeting words exist in ASL Citizen.
+#   - 60 of those have >= 10 training samples.
+#   - This vocab covers ~40% of natural meeting conversation by frequency.
+#
+# Known gaps (need recorded data, not in this vocab):
+#   connectors (and/but/because/or/also), pronouns (I/we/they/he/she),
+#   modal verbs (can/will/cannot), meeting nouns (meeting/team/project/idea/
+#   question/answer/agenda), agreement (agree/sure/correct).
+#
+# Yes/no/maybe
+yes
+no
+ok
+maybe
+# Question words
+who
+what1
+where
+when
+why
+how1
+which
+# Greetings / closings
+hello
+bye
+welcome1
+sorry
+# Polite
+please
+thankyou
+# Core verbs
+need
+like
+see
+hear1
+know
+think
+understand
+help
+go
+come
+work
+wait
+try
+find
+read
+write
+# Time
+today
+tomorrow
+yesterday
+time
+again
+more
+now
+# Feelings / state
+good
+bad
+happy
+sad
+tired
+angry
+sick
+big
+small
+# Temp / contrast
+hot
+cold
+new
+# People / family / pronouns
+family
+friend
+mother
+father
+you
+name
+# Places / things / actions
+home
+school
+hospital1
+water
+coffee
+phone
+eat1
+drink
