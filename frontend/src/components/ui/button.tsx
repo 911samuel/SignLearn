@@ -19,9 +19,9 @@ const buttonVariants = cva(
         outline:
           "bg-transparent text-[var(--color-text)] border border-[var(--color-border-strong)] hover:bg-[var(--color-surface-sunken)]",
         danger:
-          "bg-[var(--color-danger)] text-white hover:opacity-90",
+          "bg-red-700 text-white hover:bg-red-800",
         success:
-          "bg-[var(--color-success)] text-white hover:opacity-90",
+          "bg-green-700 text-white hover:bg-green-800",
         link:
           "bg-transparent text-[var(--color-brand)] underline-offset-4 hover:underline px-0 py-0 h-auto",
       },

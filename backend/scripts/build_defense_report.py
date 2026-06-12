@@ -103,9 +103,9 @@ def build() -> None:
     # Latency from the dedicated profile, falling back to the run's metrics.
     latency = load_json(REPORTS_DIR / "phase5_latency.json") or {}
     dataset_audit = load_json(REPORTS_DIR / "dataset_audit.json") or {}
-    # Use the production ASL Citizen 42-class curated TCN word model
-    word_metrics = load_json(RUNS_DIR / "word-aslc-tcn-curated-42-v1" / "reports" / "test_metrics.json")
-    word_config = load_json(RUNS_DIR / "word-aslc-tcn-curated-42-v1" / "reports" / "config.json")
+    # Use the production ASL Citizen 78-class broad-conversation TCN word model
+    word_metrics = load_json(RUNS_DIR / "word-aslc-tcn-78cls-v1" / "reports" / "test_metrics.json")
+    word_config = load_json(RUNS_DIR / "word-aslc-tcn-78cls-v1" / "reports" / "config.json")
 
     phase3 = collect_phase3_runs()
 

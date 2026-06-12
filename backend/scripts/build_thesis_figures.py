@@ -25,8 +25,8 @@ OUT = REPO / "artifacts" / "thesis" / "figures"
 OUT.mkdir(parents=True, exist_ok=True)
 
 PROD = RUNS / "phase3-raw-balanced__arch=tcn_fm=raw_lr=0.0005_do=0.4"
-WORD = RUNS / "word-aslc-tcn-curated-42-v1"
-WORD_N_CLASSES = 42
+WORD = RUNS / "word-aslc-tcn-78cls-v1"
+WORD_N_CLASSES = 78
 
 plt.rcParams.update({
     "font.size": 11,

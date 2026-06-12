@@ -55,11 +55,11 @@ export function Toaster({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast, dismiss }}>
       {children}
-      <ol
-        role="region"
+      <section
         aria-label="Notifications"
         className="pointer-events-none fixed bottom-4 right-4 z-[200] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
       >
+      <ol className="contents">
         {toasts.map((t) => {
           const { icon: Icon, cls } = toneStyles[t.tone ?? "info"];
           return (
@@ -89,6 +89,7 @@ export function Toaster({ children }: { children: React.ReactNode }) {
           );
         })}
       </ol>
+      </section>
     </ToastContext.Provider>
   );
 }

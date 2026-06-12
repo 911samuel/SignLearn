@@ -38,8 +38,8 @@
   --color-border: #e2e8f0;
   --color-border-strong: #cbd5e1;
   --color-text: #0f172a;
-  --color-text-muted: #475569;
-  --color-text-faint: #64748b;
+  --color-text-muted: #334155;
+  --color-text-faint: #52606e;
   --color-text-inverted: #ffffff;
 
   --color-brand:            var(--color-brand-600);
@@ -178,9 +178,13 @@
     --color-accent-hover:     #5eead4;
     --color-accent-foreground: #062c2a;
     --color-success: #4ade80;
+    --color-success-subtle: color-mix(in srgb, #4ade80 14%, transparent);
     --color-warning: #fbbf24;
+    --color-warning-subtle: color-mix(in srgb, #fbbf24 14%, transparent);
     --color-danger:  #f87171;
+    --color-danger-subtle:  color-mix(in srgb, #f87171 16%, transparent);
     --color-info:    #60a5fa;
+    --color-info-subtle:    color-mix(in srgb, #60a5fa 14%, transparent);
   }
 }
 
@@ -245,11 +249,13 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); font-weight: 650; }
 button { font-family: inherit; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-a { color: inherit; text-decoration: none; }
-a:hover { text-decoration: underline; text-underline-offset: 3px; }
-/* Plain prose links (not wrapped in a component) still get brand colour. */
-.prose a, p > a, li > a { color: var(--color-brand); }
-.prose a:hover, p > a:hover, li > a:hover { color: var(--color-brand-hover); }
+@layer base {
+  a { color: inherit; text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  /* Plain prose links (not wrapped in a component) still get brand colour. */
+  .prose a, p > a, li > a { color: var(--color-brand); }
+  .prose a:hover, p > a:hover, li > a:hover { color: var(--color-brand-hover); }
+}
 
 :focus-visible {
   outline: 3px solid var(--color-focus);
