@@ -1,9 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 
+// STUN only works for ~80% of NATs (same-network, simple NATs).  Cross-network
+// peers behind symmetric NATs or strict firewalls need a TURN server to relay
+// the video stream.  Open Relay Project provides free TURN service that is
+// sufficient for demos; for production, switch to a paid provider (Xirsys,
+// Twilio NAT Traversal, or self-hosted coturn) with auth tokens.
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  {
+    urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
 ];
 
 export type IceState = RTCPeerConnectionState;
