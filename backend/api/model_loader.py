@@ -271,7 +271,7 @@ def run_inference_probs(seq: np.ndarray) -> np.ndarray:
 
 WORD_SEQ_LEN = 80
 _WORD_MODEL_PATH = _REPO_ROOT_GUESS = Path(__file__).resolve().parents[2] / "artifacts" / "checkpoints" / "tcn_word_best.onnx"
-_WORD_VOCAB_PATH = Path(__file__).resolve().parents[2] / "configs" / "asl_citizen_demo_words_curated.txt"
+_WORD_VOCAB_PATH = Path(__file__).resolve().parents[2] / "configs" / "word_curated_v3.txt"
 
 
 def _load_word_class_names() -> list[str]:
