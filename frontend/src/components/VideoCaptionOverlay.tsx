@@ -40,7 +40,7 @@ export function VideoCaptionOverlay({
       aria-label="Live captions"
       className={cn(
         "pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-1 px-3 pb-3",
-        "bg-gradient-to-t from-black/75 via-black/40 to-transparent pt-8",
+        "bg-linear-to-t from-black/75 via-black/40 to-transparent pt-8",
         className,
       )}
     >

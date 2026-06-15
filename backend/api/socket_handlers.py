@@ -322,3 +322,7 @@ def register(socketio: SocketIO) -> None:
     @socketio.on("webrtc_ice")
     def on_ice(data: dict):
         _relay("webrtc_ice", data)
+
+    @socketio.on("webrtc_ready")
+    def on_ready(data: dict | None = None):
+        _relay("webrtc_ready", data or {})
