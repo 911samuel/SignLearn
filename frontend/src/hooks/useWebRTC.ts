@@ -1,28 +1,40 @@
 import { useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 
-// STUN only works for ~80% of NATs (same-network, simple NATs).  Cross-network
-// peers behind symmetric NATs or strict firewalls need a TURN server to relay
-// the video stream.  Open Relay Project provides free TURN service that is
-// sufficient for demos; for production, switch to a paid provider (Xirsys,
-// Twilio NAT Traversal, or self-hosted coturn) with auth tokens.
+// STUN handles ~80% of NATs (same-network, simple NATs).  Cross-network peers
+// behind symmetric NATs (cellular carriers, hotel wifi, corporate firewalls)
+// need a TURN relay to connect at all.  Multiple TURN endpoints are listed so
+// the browser can fall back from UDP to TCP/443 on networks that block UDP.
+//
+// These credentials are tied to a free Metered.ca account (500MB/month relay
+// quota — enough for demos but not production traffic).  For real production
+// use, generate ephemeral tokens server-side instead of shipping a long-lived
+// credential in the client bundle.
+const METERED_USERNAME = "744e55666a98a008b171d14c";
+const METERED_CREDENTIAL = "ay/FzqiyBEtuN+9O";
+
 const ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.relay.metered.ca:80" },
   { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
   {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:standard.relay.metered.ca:80",
+    username: METERED_USERNAME,
+    credential: METERED_CREDENTIAL,
   },
   {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:standard.relay.metered.ca:80?transport=tcp",
+    username: METERED_USERNAME,
+    credential: METERED_CREDENTIAL,
   },
   {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:standard.relay.metered.ca:443",
+    username: METERED_USERNAME,
+    credential: METERED_CREDENTIAL,
+  },
+  {
+    urls: "turns:standard.relay.metered.ca:443?transport=tcp",
+    username: METERED_USERNAME,
+    credential: METERED_CREDENTIAL,
   },
 ];
 
