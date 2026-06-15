@@ -91,14 +91,19 @@ profile:
 # Serving
 # ──────────────────────────────────────────────────────────────────────────────
 
+## Generate a stable local .env (gitignored) on first run
+.env:
+	@echo "→ Generating .env with a fresh SIGNLEARN_SECRET_KEY (one-time)"
+	@echo "SIGNLEARN_SECRET_KEY=$$($(PYTHON) -c 'import secrets; print(secrets.token_hex(32))')" > .env
+
 ## Start the Flask/SocketIO backend with default model (http://127.0.0.1:5001)
-serve:
-	$(PYTHON) backend/scripts/run_server.py
+serve: .env
+	set -a; . ./.env; set +a; $(PYTHON) backend/scripts/run_server.py
 
 ## Start the backend serving a specific ONNX checkpoint (usage: make serve-onnx MODEL=path/to/model.onnx)
 MODEL ?= artifacts/checkpoints/tcn_best.onnx
-serve-onnx:
-	SIGNLEARN_MODEL_PATH=$(MODEL) $(PYTHON) backend/scripts/run_server.py
+serve-onnx: .env
+	set -a; . ./.env; set +a; SIGNLEARN_MODEL_PATH=$(MODEL) $(PYTHON) backend/scripts/run_server.py
 
 ## Start the Next.js frontend dev server (http://localhost:5173)
 frontend:

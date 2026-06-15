@@ -1,0 +1,17 @@
+# Step 4 — feature-mode sweep on the winning aug profile.
+# `aug_profile` value below is updated by the human after reading the
+# step-3 promotion in artifacts/reports/word_model_improvement_log.md.
+
+sweep_id: word78-features
+trainer: backend/scripts/train_word_model.py
+words_file: configs/word78_vocab.txt
+epochs: 80
+batch_size: 16
+seq_len: 80
+
+grid:
+  arch:          [tcn]
+  learning_rate: [5.0e-4]
+  dropout:       [0.4]
+  aug_profile:   [mixup_sameclass]
+  feature_mode:  [raw, raw+velocity, raw+velocity+angles]

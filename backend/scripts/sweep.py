@@ -58,6 +58,8 @@ _GRID_FIELDS = (
     "dropout",
     "batch_size",
     "epochs",
+    "aug_profile",     # train_word_model.py
+    "seq_len",         # train_word_model.py
 )
 
 
@@ -86,6 +88,8 @@ def _make_run_name(sweep_id: str, params: dict) -> str:
                 "dropout": "do",
                 "batch_size": "bs",
                 "epochs": "ep",
+                "aug_profile": "aug",
+                "seq_len": "T",
             }[k]
             # compact value rendering
             if isinstance(v, float):
@@ -96,6 +100,10 @@ def _make_run_name(sweep_id: str, params: dict) -> str:
     return f"{sweep_id}__" + "_".join(bits)
 
 
+# Short-name mapping needs to know aug_profile/seq_len too.
+_SHORT_NAME_PATCH = {"aug_profile": "aug", "seq_len": "T"}
+
+
 def _build_train_args(
     params: dict,
     defaults: dict,
@@ -103,9 +111,10 @@ def _build_train_args(
     data_dir: Path | None,
 ) -> list[str]:
     """Compose the CLI invocation for one training run."""
+    trainer_rel = defaults.get("trainer") or "backend/scripts/train_model.py"
     cmd: list[str] = [
         sys.executable,
-        str(_REPO_ROOT / "backend" / "scripts" / "train_model.py"),
+        str(_REPO_ROOT / trainer_rel),
         "--run-name", run_name,
     ]
     if "arch" in params:
@@ -122,8 +131,20 @@ def _build_train_args(
     batch = params.get("batch_size", defaults.get("batch_size"))
     if batch is not None:
         cmd += ["--batch-size", str(batch)]
-    if data_dir is not None:
+    if "aug_profile" in params:
+        cmd += ["--aug-profile", str(params["aug_profile"])]
+    if "seq_len" in params:
+        cmd += ["--seq-len", str(params["seq_len"])]
+    seq_len_default = defaults.get("seq_len")
+    if "seq_len" not in params and seq_len_default is not None:
+        cmd += ["--seq-len", str(seq_len_default)]
+    if data_dir is not None and trainer_rel.endswith("train_model.py"):
+        # Only the letter trainer accepts --data-dir; the word trainer hardcodes
+        # data/processed/words.
         cmd += ["--data-dir", str(data_dir)]
+    words_file = defaults.get("words_file")
+    if words_file and trainer_rel.endswith("train_word_model.py"):
+        cmd += ["--words-file", str(words_file)]
     return cmd
 
 
@@ -157,6 +178,9 @@ def run_sweep(config_path: Path, dry_run: bool = False) -> dict:
     defaults = {
         "epochs": cfg.get("epochs"),
         "batch_size": cfg.get("batch_size"),
+        "trainer": cfg.get("trainer"),
+        "seq_len": cfg.get("seq_len"),
+        "words_file": cfg.get("words_file"),
     }
     data_dir = Path(cfg["data_dir"]) if cfg.get("data_dir") else None
 

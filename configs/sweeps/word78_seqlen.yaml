@@ -1,0 +1,17 @@
+# Step 5 — sequence-length sweep on winning aug + features.
+# `aug_profile` and `feature_mode` updated after steps 3 and 4.
+
+sweep_id: word78-seqlen
+trainer: backend/scripts/train_word_model.py
+words_file: configs/word78_vocab.txt
+epochs: 80
+batch_size: 16
+
+grid:
+  arch:          [tcn]
+  learning_rate: [5.0e-4]
+  dropout:       [0.4]
+  aug_profile:   [mixup_sameclass]
+  feature_mode:  [raw]
+  seq_len:       [60, 120]
+# seq_len=80 already trained in step 3 (mixup_sameclass run); 79.87% top-1.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Hand, History, Mic } from "lucide-react";
 import {
   DropdownMenu,
@@ -10,6 +10,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BACKEND_URL } from "@/lib/api";
@@ -40,10 +47,11 @@ function fmtTime(ts: number | string) {
 
 export function ConversationLog({ entries, roomId }: ConversationLogProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [entries]);
+    if (drawerOpen) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [entries, drawerOpen]);
 
   async function fetchMessages() {
     try {
@@ -116,76 +124,100 @@ export function ConversationLog({ entries, roomId }: ConversationLogProps) {
     URL.revokeObjectURL(url);
   }
 
-  if (entries.length === 0) return null;
+  const hasEntries = entries.length > 0;
 
   return (
-    <section
-      aria-label="Conversation transcript"
-      className="border-t border-[var(--color-border)] bg-[var(--color-surface)]"
-    >
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2">
-        <div className="inline-flex items-center gap-2">
-          <History className="size-4 text-[var(--color-text-muted)]" aria-hidden />
-          <span className="eyebrow">Conversation</span>
-          <Badge tone="neutral" className="text-[0.65rem]">
-            {entries.length}
-          </Badge>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
-              <Download className="size-4" aria-hidden /> Export
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Export transcript</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => doExport("txt")}>Plain text (.txt)</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => doExport("md")}>Markdown (.md)</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => doExport("csv")}>Spreadsheet (.csv)</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </header>
+    <div className="pointer-events-none fixed bottom-4 right-4 z-40 flex items-center gap-2">
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasEntries}
+            className="pointer-events-auto shadow-sm"
+            aria-label="Show transcript"
+          >
+            <History className="size-4" aria-hidden />
+            {hasEntries && (
+              <Badge tone="neutral" className="ml-1 text-[0.65rem]">
+                {entries.length}
+              </Badge>
+            )}
+          </Button>
+        </SheetTrigger>
 
-      <div
-        role="log"
-        aria-live="polite"
-        className="flex max-h-[200px] flex-col gap-1.5 overflow-y-auto px-4 py-3"
-      >
-        {entries.map((entry) => {
-          const isSign = entry.source === "sign";
-          const Icon = isSign ? Hand : Mic;
-          return (
-            <div
-              key={entry.id}
-              className={cn(
-                "flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-1.5",
-                isSign
-                  ? "bg-[var(--color-brand-subtle)]"
-                  : "bg-[var(--color-surface-sunken)]",
-              )}
-            >
-              <Icon
-                className={cn(
-                  "size-3.5 shrink-0",
-                  isSign ? "text-[var(--color-brand)]" : "text-[var(--color-text-muted)]",
-                )}
-                aria-hidden
-              />
-              <span className="flex-1 text-sm text-[var(--color-text)]">{entry.text}</span>
-              {entry.confidence != null && (
-                <span className="font-mono text-xs text-[var(--color-text-muted)]">
-                  {(entry.confidence * 100).toFixed(0)}%
-                </span>
-              )}
-              <time className="font-mono text-xs text-[var(--color-text-faint)]">
-                {fmtTime(entry.ts)}
-              </time>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-    </section>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="border-b border-[var(--color-border)] px-4 py-3">
+            <SheetTitle className="flex items-center gap-2">
+              <History className="size-4 text-[var(--color-text-muted)]" aria-hidden />
+              Transcript
+              <Badge tone="neutral" className="text-[0.65rem]">
+                {entries.length}
+              </Badge>
+            </SheetTitle>
+          </SheetHeader>
+
+          <div
+            role="log"
+            aria-live="polite"
+            className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-3"
+          >
+            {entries.map((entry) => {
+              const isSign = entry.source === "sign";
+              const Icon = isSign ? Hand : Mic;
+              return (
+                <div
+                  key={entry.id}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-1.5",
+                    isSign
+                      ? "bg-[var(--color-brand-subtle)]"
+                      : "bg-[var(--color-surface-sunken)]",
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      "size-3.5 shrink-0",
+                      isSign ? "text-[var(--color-brand)]" : "text-[var(--color-text-muted)]",
+                    )}
+                    aria-hidden
+                  />
+                  <span className="flex-1 text-sm text-[var(--color-text)]">{entry.text}</span>
+                  {entry.confidence != null && (
+                    <span className="font-mono text-xs text-[var(--color-text-muted)]">
+                      {(entry.confidence * 100).toFixed(0)}%
+                    </span>
+                  )}
+                  <time className="font-mono text-xs text-[var(--color-text-faint)]">
+                    {fmtTime(entry.ts)}
+                  </time>
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!hasEntries}
+            className="pointer-events-auto shadow-sm"
+          >
+            <Download className="size-4" aria-hidden /> Export
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="top">
+          <DropdownMenuLabel>Export transcript</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => doExport("txt")}>Plain text (.txt)</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => doExport("md")}>Markdown (.md)</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => doExport("csv")}>Spreadsheet (.csv)</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }

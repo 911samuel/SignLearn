@@ -222,6 +222,38 @@ def speed_warp(seq: np.ndarray, factor: float) -> np.ndarray:
     return fn2(new_t).astype(np.float32)
 
 
+def time_warp(seq: np.ndarray, factor_range=(0.8, 1.25), n_knots: int = 4, rng=None) -> np.ndarray:
+    """Non-uniform temporal warping.
+
+    Generates ``n_knots`` random local speed multipliers in ``factor_range``,
+    builds a monotonic cumulative time map from them, and resamples the
+    sequence onto that map. Unlike :func:`speed_warp` (uniform stretching),
+    this stretches some intervals and compresses others within the same
+    clip — simulating prosody/rhythm variation across signers.
+
+    Output shape is always (T, 126).
+    """
+    _assert_seq(seq)
+    T = seq.shape[0]
+    if T < 2:
+        return seq.astype(np.float32)
+    rng = rng or np.random.default_rng()
+    lo, hi = factor_range
+    # Sample n_knots local speeds, then build a piecewise-linear cumulative
+    # warp by integrating their reciprocal (slow speed = stretched time).
+    speeds = rng.uniform(lo, hi, size=max(2, n_knots))
+    cum = np.concatenate([[0.0], np.cumsum(1.0 / speeds)])
+    cum = cum / cum[-1]  # normalize to [0, 1]
+    # Resample cum to length T (knots are sparse anchors over the timeline).
+    knot_pos = np.linspace(0.0, 1.0, len(cum))
+    new_t = np.interp(np.linspace(0.0, 1.0, T), knot_pos, cum)
+    fn = interp1d(
+        np.linspace(0.0, 1.0, T), seq, axis=0,
+        kind="linear", fill_value="extrapolate",
+    )
+    return fn(new_t).astype(np.float32)
+
+
 def drop_frames(seq: np.ndarray, p: float = 0.1, rng=None) -> np.ndarray:
     """Zero out each frame independently with probability p.
 
@@ -281,6 +313,19 @@ _DEFAULT_RANGES = {
     "noise_sigma":   0.01,
     "drop_p":        0.1,
     "speed_factor": (0.8, 1.25),
+    "time_warp_factor": (0.8, 1.25),
+}
+
+
+# Named augmentation profiles consumed by train_word_model.py --aug-profile.
+# Keep TRAINING_PROBS as the baseline; profiles only diverge from it.
+AUG_PROFILES: dict[str, dict] = {
+    "baseline":   dict(TRAINING_PROBS),
+    "timewarp":   {**TRAINING_PROBS, "time_warp": 0.5},
+    # mixup is applied at batch level, not inside random_augment — the
+    # per-sample probs here stay equal to baseline.
+    "mixup_sameclass": dict(TRAINING_PROBS),
+    "timewarp+mixup":  {**TRAINING_PROBS, "time_warp": 0.5},
 }
 
 
@@ -323,6 +368,9 @@ def random_augment(
     if rng.random() < probs.get("speed_warp", 0.0):
         lo, hi = ranges["speed_factor"]
         out = speed_warp(out, float(rng.uniform(lo, hi)))
+
+    if rng.random() < probs.get("time_warp", 0.0):
+        out = time_warp(out, factor_range=ranges["time_warp_factor"], rng=rng)
 
     if rng.random() < probs["scale"]:
         lo, hi = ranges["scale_factor"]

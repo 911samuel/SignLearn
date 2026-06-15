@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { BookOpen, Dumbbell, FlaskConical, LineChart, MessageSquare, User } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { BookOpen, Dumbbell, FlaskConical, Hand, LineChart, MessageSquare, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { A11yPreferencesMenu } from "./A11yPreferencesMenu";
+import { useToast } from "@/components/ui/toast";
+import { BACKEND_URL } from "@/lib/api";
 import { t } from "@/i18n";
 
 const ITEMS = [
@@ -17,6 +20,30 @@ const ITEMS = [
 
 export function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [creating, setCreating] = useState(false);
+
+  async function startConversation() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/rooms`, { method: "POST" });
+      if (!res.ok) throw new Error("Could not reach the SignLearn server.");
+      const { room_id } = await res.json();
+      router.push(`/r/${room_id}/join`);
+    } catch (err) {
+      toast({
+        tone: "danger",
+        title: "Couldn't start a conversation",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Check your connection and try again.",
+      });
+      setCreating(false);
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-bg)_92%,transparent)] backdrop-blur supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--color-bg)_75%,transparent)]">
@@ -61,11 +88,25 @@ export function TopNav() {
           >
             <User className="size-5" aria-hidden />
           </Link>
-          <Button asChild variant="primary" size="md" className="hidden sm:inline-flex">
-            <Link href="/" aria-label={t("nav.startConversation")}>
-              <MessageSquare className="size-4" aria-hidden />
-              <span>{t("nav.startConversation")}</span>
-            </Link>
+          <Button
+            variant="primary"
+            size="md"
+            className="hidden sm:inline-flex"
+            onClick={startConversation}
+            disabled={creating}
+            aria-label={t("nav.startConversation")}
+          >
+            {creating ? (
+              <>
+                <Hand className="size-4 sl-pulse-soft" aria-hidden />
+                <span>Starting…</span>
+              </>
+            ) : (
+              <>
+                <MessageSquare className="size-4" aria-hidden />
+                <span>{t("nav.startConversation")}</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

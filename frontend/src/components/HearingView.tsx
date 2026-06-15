@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Mic, MicOff, UserRound, Users, Volume2, VolumeX } from "lucide-react";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useSpeakSignCaptions } from "@/hooks/useSpeakSignCaptions";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { RemoteVideo } from "./RemoteVideo";
-import { CaptionsPanel } from "./CaptionsPanel";
+import { VideoCaptionOverlay } from "./VideoCaptionOverlay";
 import { PermissionGate } from "./PermissionGate";
 import type { Caption } from "@/hooks/useRoom";
 import { usePreferences } from "@/lib/preferences";
@@ -40,7 +40,6 @@ export function HearingView({ socket, captions, peerPresent, onSpeech }: Hearing
 
   useSpeakSignCaptions(captions, ttsEnabled);
 
-  // Push-to-talk via spacebar — works for both hold and toggle modes.
   const heldRef = useRef(false);
   useEffect(() => {
     if (!supported || micStatus !== "ok") return;
@@ -59,7 +58,6 @@ export function HearingView({ socket, captions, peerPresent, onSpeech }: Hearing
         else start();
         return;
       }
-      // Hold mode
       if (e.repeat) return;
       e.preventDefault();
       if (!heldRef.current) {
@@ -132,125 +130,133 @@ export function HearingView({ socket, captions, peerPresent, onSpeech }: Hearing
   };
 
   return (
-    <div className="grid flex-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-      {/* STAGE — peer video + captions */}
-      <Card className="flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
-          <div className="inline-flex items-center gap-2">
-            <span className="eyebrow">Signer</span>
+    <div className="flex flex-1 flex-col gap-3">
+      {/* TILE GRID — symmetric, Meet-style */}
+      <div className="grid flex-1 gap-3 lg:grid-cols-2">
+        {/* PEER TILE — signer */}
+        <Card className="flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5">
+            <div className="inline-flex items-center gap-2">
+              <Users className="size-4 text-[var(--color-text-muted)]" aria-hidden />
+              <span className="eyebrow">Signer</span>
+            </div>
             {!peerPresent && (
               <Badge tone="warning" className="text-[0.65rem]">Waiting…</Badge>
             )}
           </div>
-          <Button
-            variant={ttsEnabled ? "primary" : "secondary"}
-            size="sm"
-            onClick={() => setTtsEnabled((v) => !v)}
-            aria-pressed={ttsEnabled}
-          >
-            {ttsEnabled ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
-            {ttsEnabled ? "Reading aloud" : "Muted"}
-          </Button>
-        </div>
-        <RemoteVideo
-          stream={remoteStream}
-          className="aspect-video w-full bg-[var(--color-surface-sunken)]"
-        />
-        <div className="border-t border-[var(--color-border)] p-3">
-          <CaptionsPanel
-            captions={captions}
-            filter="sign"
-            emptyHint="When the signer signs a word, it appears here as a caption."
-          />
-        </div>
-      </Card>
-
-      {/* RIGHT RAIL — your video + push-to-talk */}
-      <div className="flex flex-col gap-4">
-        <Card className="overflow-hidden">
-          <div className="border-b border-[var(--color-border)] px-4 py-2 eyebrow">You</div>
-          <RemoteVideo
-            stream={localStream}
-            muted
-            className="aspect-video w-full bg-[var(--color-surface-sunken)]"
-          />
+          <div className="relative flex-1 bg-black">
+            <RemoteVideo
+              stream={remoteStream}
+              className="h-full w-full object-cover"
+            />
+            <VideoCaptionOverlay
+              captions={captions}
+              filter="sign"
+              emptyHint={peerPresent ? "When the signer signs a word, it appears here." : "Waiting for signer…"}
+            />
+          </div>
         </Card>
 
-        <Card className="p-5">
-          {!supported ? (
-            <Alert tone="warning" title="Speech recognition not available">
-              This browser doesn&apos;t support the Web Speech API. Try Chrome or Edge.
-            </Alert>
-          ) : (
-            <>
-              <p className="eyebrow">Push to talk</p>
-              <p className="mt-2 text-sm text-[var(--color-text-muted)] leading-relaxed">
-                {isToggleMode
-                  ? "Tap to start speaking, tap again to stop. Or press Space."
-                  : "Hold the button (or press and hold Space) to talk. Release to send."}
-              </p>
-
-              <button
-                type="button"
-                disabled={!supported}
-                onPointerDown={pressStart}
-                onPointerUp={pressEnd}
-                onPointerCancel={pressEnd}
-                onPointerLeave={pressEnd}
-                onClick={toggleClick}
-                aria-pressed={listening}
-                aria-label={listening ? "Listening — release to stop" : "Push to talk"}
-                className={cn(
-                  "mt-4 inline-flex h-20 w-full select-none items-center justify-center gap-3 rounded-[var(--radius-lg)] text-lg font-bold transition focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)] disabled:opacity-50",
-                  listening
-                    ? "bg-[var(--color-danger)] text-white shadow-[var(--shadow-card)] scale-[1.02]"
-                    : "bg-[var(--color-brand)] text-[var(--color-brand-foreground)] hover:bg-[var(--color-brand-hover)]",
-                )}
-                style={{ touchAction: "none" }}
-              >
-                {listening ? (
-                  <>
-                    <Mic className="size-6 sl-pulse-soft" aria-hidden />
-                    Listening…
-                  </>
-                ) : (
-                  <>
-                    <Mic className="size-6" aria-hidden />
-                    {isToggleMode ? "Tap to talk" : "Push to talk"}
-                  </>
-                )}
-              </button>
-
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <HotkeyHint keys={["Space"]} description={isToggleMode ? "toggle listening" : "hold to talk"} />
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-xs font-semibold",
-                    listening ? "text-[var(--color-danger)]" : "text-[var(--color-text-muted)]",
-                  )}
-                  aria-live="polite"
-                >
-                  {listening ? (
-                    <>
-                      <Mic className="size-3.5" aria-hidden /> On
-                    </>
-                  ) : (
-                    <>
-                      <MicOff className="size-3.5" aria-hidden /> Off
-                    </>
-                  )}
-                </span>
+        {/* OWN TILE */}
+        <Card className="flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5">
+            <div className="inline-flex items-center gap-2">
+              <UserRound className="size-4 text-[var(--color-text-muted)]" aria-hidden />
+              <span className="eyebrow">You (Hearing)</span>
+            </div>
+            <Button
+              variant={ttsEnabled ? "primary" : "secondary"}
+              size="sm"
+              onClick={() => setTtsEnabled((v) => !v)}
+              aria-pressed={ttsEnabled}
+            >
+              {ttsEnabled ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
+              {ttsEnabled ? "Reading aloud" : "Muted"}
+            </Button>
+          </div>
+          <div className="relative flex-1 bg-black">
+            <RemoteVideo
+              stream={localStream}
+              muted
+              className="h-full w-full -scale-x-100 object-cover"
+            />
+            {listening && (
+              <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-danger)] px-3 py-1.5 text-white shadow">
+                <Mic className="size-4 sl-pulse-soft" aria-hidden />
+                <span className="text-sm font-bold">Listening…</span>
               </div>
-
-              {micError && (
-                <Alert tone="danger" className="mt-3" title="Microphone unavailable">
-                  {micError}
-                </Alert>
-              )}
-            </>
-          )}
+            )}
+          </div>
         </Card>
       </div>
+
+      {/* BOTTOM CONTROL BAR — push to talk */}
+      <Card className="px-4 py-3">
+        {!supported ? (
+          <Alert tone="warning" title="Speech recognition not available">
+            This browser doesn&apos;t support the Web Speech API. Try Chrome or Edge.
+          </Alert>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={!supported}
+              onPointerDown={pressStart}
+              onPointerUp={pressEnd}
+              onPointerCancel={pressEnd}
+              onPointerLeave={pressEnd}
+              onClick={toggleClick}
+              aria-pressed={listening}
+              aria-label={listening ? "Listening — release to stop" : "Push to talk"}
+              className={cn(
+                "inline-flex h-12 min-w-[180px] select-none items-center justify-center gap-2 rounded-[var(--radius-md)] px-5 text-base font-bold transition focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)] disabled:opacity-50",
+                listening
+                  ? "bg-[var(--color-danger)] text-white shadow-[var(--shadow-card)]"
+                  : "bg-[var(--color-brand)] text-[var(--color-brand-foreground)] hover:bg-[var(--color-brand-hover)]",
+              )}
+              style={{ touchAction: "none" }}
+            >
+              {listening ? (
+                <>
+                  <Mic className="size-5 sl-pulse-soft" aria-hidden />
+                  Listening…
+                </>
+              ) : (
+                <>
+                  <Mic className="size-5" aria-hidden />
+                  {isToggleMode ? "Tap to talk" : "Push to talk"}
+                </>
+              )}
+            </button>
+
+            <HotkeyHint keys={["Space"]} description={isToggleMode ? "toggle listening" : "hold to talk"} />
+
+            <span
+              className={cn(
+                "ml-auto inline-flex items-center gap-1.5 text-xs font-semibold",
+                listening ? "text-[var(--color-danger)]" : "text-[var(--color-text-muted)]",
+              )}
+              aria-live="polite"
+            >
+              {listening ? (
+                <>
+                  <Mic className="size-3.5" aria-hidden /> Mic on
+                </>
+              ) : (
+                <>
+                  <MicOff className="size-3.5" aria-hidden /> Mic off
+                </>
+              )}
+            </span>
+
+            {micError && (
+              <Alert tone="danger" className="w-full" title="Microphone unavailable">
+                {micError}
+              </Alert>
+            )}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

@@ -36,6 +36,9 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from backend.data.constants import FEATURE_DIM
+from backend.data.augment import AUG_PROFILES, random_augment
+from backend.data.features import apply_feature_mode, output_dim as feature_dim
+from backend.data.mixup import same_class_mixup
 from backend.model.architectures import build as build_arch
 from backend.model.config import TrainConfig
 
@@ -79,7 +82,12 @@ def _gloss_from_filename(path: Path) -> str:
     return "_".join(parts[:-2]) if len(parts) >= 3 else stem
 
 
+STORED_SEQ_LEN = 80  # native length of data/processed/words/ samples
+
+
 def list_split(split: str, label_map: dict[str, int], seq_len: int) -> list[tuple[Path, int]]:
+    """List samples. Stored arrays are (STORED_SEQ_LEN, FEATURE_DIM); the
+    loader resamples to ``seq_len`` at training time (see _resample)."""
     split_dir = DATA_ROOT / split
     items: list[tuple[Path, int]] = []
     skipped_unknown = 0
@@ -90,7 +98,7 @@ def list_split(split: str, label_map: dict[str, int], seq_len: int) -> list[tupl
             skipped_unknown += 1
             continue
         arr = np.load(npy, mmap_mode="r")
-        if arr.shape != (seq_len, FEATURE_DIM):
+        if arr.shape != (STORED_SEQ_LEN, FEATURE_DIM):
             skipped_shape += 1
             continue
         items.append((npy, label_map[gloss]))
@@ -98,8 +106,33 @@ def list_split(split: str, label_map: dict[str, int], seq_len: int) -> list[tupl
         log.warning("%s: skipped %d file(s) with gloss not in label_map", split, skipped_unknown)
     if skipped_shape:
         log.warning("%s: skipped %d file(s) with wrong shape (expected (%d, %d))",
-                    split, skipped_shape, seq_len, FEATURE_DIM)
+                    split, skipped_shape, STORED_SEQ_LEN, FEATURE_DIM)
     return items
+
+
+def _resample_to(arr: np.ndarray, target_T: int) -> np.ndarray:
+    """Resample a stored (STORED_SEQ_LEN, D) sequence to (target_T, D).
+
+    Trims trailing all-zero (padding) frames first, then linearly interpolates
+    the *nonzero core* to ``target_T``. If the entire sequence is zero
+    (degenerate), returns zeros at the target length.
+    """
+    if arr.shape[0] == target_T:
+        return arr.astype(np.float32)
+    # find last frame with any nonzero coord
+    nz = np.any(arr != 0, axis=1)
+    if not nz.any():
+        return np.zeros((target_T, arr.shape[1]), dtype=np.float32)
+    last = int(np.where(nz)[0].max()) + 1  # number of active frames
+    core = arr[:last]
+    if last == 1:
+        return np.broadcast_to(core, (target_T, arr.shape[1])).astype(np.float32).copy()
+    src_t = np.linspace(0.0, 1.0, last)
+    dst_t = np.linspace(0.0, 1.0, target_T)
+    out = np.empty((target_T, arr.shape[1]), dtype=np.float32)
+    for d in range(arr.shape[1]):
+        out[:, d] = np.interp(dst_t, src_t, core[:, d])
+    return out
 
 
 def build_dataset(
@@ -107,22 +140,72 @@ def build_dataset(
     seq_len: int,
     batch_size: int,
     shuffle: bool,
+    aug_profile: str | None = None,
+    feature_mode: str = "raw",
 ) -> tf.data.Dataset:
+    """Build a tf.data pipeline.
+
+    aug_profile (None for val/test):
+      - None / unset       — no augmentation
+      - "baseline"         — TRAINING_PROBS
+      - "timewarp"         — TRAINING_PROBS + time_warp p=0.5
+      - "mixup_sameclass"  — TRAINING_PROBS + batch-level same-class mixup
+      - "timewarp+mixup"   — both
+    """
     paths = [str(p) for p, _ in items]
     labels = [int(y) for _, y in items]
 
+    probs = AUG_PROFILES.get(aug_profile) if aug_profile else None
+    use_mixup = aug_profile in {"mixup_sameclass", "timewarp+mixup"}
+    out_dim = feature_dim(feature_mode)
+
     def _load(path: tf.Tensor, label: tf.Tensor):
         def _np_load(p):
-            return np.load(p.decode()).astype(np.float32)
+            arr = np.load(p.decode()).astype(np.float32)
+            if arr.shape[0] != seq_len:
+                arr = _resample_to(arr, seq_len)
+            return arr
         seq = tf.numpy_function(_np_load, [path], tf.float32)
         seq.set_shape([seq_len, FEATURE_DIM])
         return seq, label
+
+    def _augment_one(seq: tf.Tensor, label: tf.Tensor):
+        def _aug(x):
+            return random_augment(x.astype(np.float32), probs=probs).astype(np.float32)
+        out = tf.numpy_function(_aug, [seq], tf.float32)
+        out.set_shape([seq_len, FEATURE_DIM])
+        return out, label
+
+    def _featurize(seq: tf.Tensor, label: tf.Tensor):
+        def _fm(x):
+            return apply_feature_mode(x.astype(np.float32), feature_mode).astype(np.float32)
+        out = tf.numpy_function(_fm, [seq], tf.float32)
+        out.set_shape([seq_len, out_dim])
+        return out, label
+
+    def _mixup_batch(seqs: tf.Tensor, labels_b: tf.Tensor):
+        def _mx(x, y):
+            mx, my = same_class_mixup(x, y, alpha=0.2)
+            return mx.astype(np.float32), my.astype(np.int64)
+        mx, my = tf.numpy_function(_mx, [seqs, labels_b], [tf.float32, tf.int64])
+        mx.set_shape([None, seq_len, FEATURE_DIM])
+        my.set_shape([None])
+        return mx, my
 
     ds = tf.data.Dataset.from_tensor_slices((paths, labels))
     if shuffle:
         ds = ds.shuffle(buffer_size=min(len(items), 2048), reshuffle_each_iteration=True)
     ds = ds.map(_load, num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    if probs is not None:
+        ds = ds.map(_augment_one, num_parallel_calls=tf.data.AUTOTUNE)
+    # Mixup is applied to RAW (T, 126) before featurization so velocity/angles
+    # are computed on the blended sequence.
+    ds = ds.batch(batch_size)
+    if use_mixup:
+        ds = ds.map(_mixup_batch, num_parallel_calls=tf.data.AUTOTUNE)
+    if feature_mode != "raw":
+        ds = ds.unbatch().map(_featurize, num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size)
+    ds = ds.prefetch(tf.data.AUTOTUNE)
     return ds
 
 
@@ -142,6 +225,22 @@ def train(args) -> None:
     test_items = list_split("test", label_map, args.seq_len)
     log.info("Items — train=%d  val=%d  test=%d", len(train_items), len(val_items), len(test_items))
 
+    if args.subsample_class and args.subsample_pct is not None:
+        # Subsample only the specified class in TRAIN; val/test untouched.
+        target_idx = label_map.get(args.subsample_class.lower())
+        if target_idx is None:
+            sys.exit(f"--subsample-class {args.subsample_class!r}: unknown class")
+        target = [it for it in train_items if it[1] == target_idx]
+        other  = [it for it in train_items if it[1] != target_idx]
+        rng = np.random.default_rng(args.seed)
+        keep_n = max(1, int(round(len(target) * args.subsample_pct)))
+        sel = rng.choice(len(target), size=keep_n, replace=False)
+        target = [target[i] for i in sel]
+        train_items = other + target
+        log.info("Subsampled '%s' to %d/%d (pct=%.2f). New train total: %d",
+                 args.subsample_class, keep_n, len(target) + (keep_n - keep_n),
+                 args.subsample_pct, len(train_items))
+
     if not train_items:
         sys.exit("No training data found. Run extract_wlasl_landmarks.py first.")
 
@@ -153,18 +252,28 @@ def train(args) -> None:
     if weak:
         log.warning("Classes with <5 train samples: %s", weak)
 
-    train_ds = build_dataset(train_items, args.seq_len, args.batch_size, shuffle=True)
-    val_ds = build_dataset(val_items, args.seq_len, args.batch_size, shuffle=False) if val_items else None
-    test_ds = build_dataset(test_items, args.seq_len, args.batch_size, shuffle=False) if test_items else None
+    train_ds = build_dataset(
+        train_items, args.seq_len, args.batch_size, shuffle=True,
+        aug_profile=args.aug_profile if args.aug_profile != "none" else None,
+        feature_mode=args.feature_mode,
+    )
+    val_ds = build_dataset(
+        val_items, args.seq_len, args.batch_size, shuffle=False,
+        feature_mode=args.feature_mode,
+    ) if val_items else None
+    test_ds = build_dataset(
+        test_items, args.seq_len, args.batch_size, shuffle=False,
+        feature_mode=args.feature_mode,
+    ) if test_items else None
 
     cfg = TrainConfig(
         arch_name=args.arch,
-        feature_mode="raw",
+        feature_mode=args.feature_mode,
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.lr,
     )
-    cfg.input_shape = (args.seq_len, FEATURE_DIM)
+    cfg.input_shape = (args.seq_len, feature_dim(args.feature_mode))
     cfg.num_classes = n_classes
     if hasattr(cfg, "dropout"):
         cfg.dropout = args.dropout
@@ -218,6 +327,8 @@ def train(args) -> None:
         "n_train": len(train_items),
         "n_val": len(val_items),
         "n_test": len(test_items),
+        "aug_profile": args.aug_profile,
+        "feature_mode": args.feature_mode,
     }, indent=2))
     (run_dir / "reports" / "history.json").write_text(json.dumps(history.history, indent=2))
     (run_dir / "word_label_map.json").write_text(json.dumps(label_map, indent=2))
@@ -268,6 +379,20 @@ def main() -> None:
     p.add_argument("--epochs", type=int, default=40)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--dropout", type=float, default=0.4)
+    p.add_argument("--aug-profile", default="none",
+                   choices=["none", "baseline", "timewarp",
+                            "mixup_sameclass", "timewarp+mixup"],
+                   help="Augmentation profile (default: none — matches the "
+                        "existing word-aslc-tcn-78cls-v1 baseline).")
+    p.add_argument("--feature-mode", default="raw",
+                   choices=["raw", "raw+velocity", "raw+velocity+angles"],
+                   help="Reserved for step 4. Currently only 'raw' is wired "
+                        "through the data pipeline.")
+    p.add_argument("--subsample-class", default=None,
+                   help="If set, subsample this class's training data only.")
+    p.add_argument("--subsample-pct", type=float, default=None,
+                   help="Fraction of --subsample-class samples to keep (0,1].")
+    p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
     train(args)
 

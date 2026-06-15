@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { Pause, Play, RotateCcw, UserRound, Zap } from "lucide-react";
+import { Pause, Play, RotateCcw, UserRound, Users, Zap } from "lucide-react";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { LandmarkOverlay } from "./LandmarkOverlay";
 import { RemoteVideo } from "./RemoteVideo";
-import { CaptionsPanel } from "./CaptionsPanel";
+import { VideoCaptionOverlay } from "./VideoCaptionOverlay";
 import { PermissionGate } from "./PermissionGate";
 import type { Caption } from "@/hooks/useRoom";
 import { Card } from "@/components/ui/card";
@@ -16,8 +16,6 @@ import { Alert } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { StatusPill, type Status } from "@/components/primitives/StatusPill";
-import { ConfidenceMeter } from "@/components/primitives/ConfidenceMeter";
-import { LivePredictionBadge } from "@/components/primitives/LivePredictionBadge";
 
 const VIDEO_W = 640;
 const VIDEO_H = 480;
@@ -119,146 +117,162 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
   const topCandidate = candidates[0];
 
   return (
-    <div className="grid flex-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-      {/* STAGE — camera + landmark overlay + bottom controls */}
-      <Card className="flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
-          <div className="inline-flex items-center gap-2">
-            <UserRound className="size-4 text-[var(--color-text-muted)]" aria-hidden />
-            <span className="eyebrow">You (Signer)</span>
-          </div>
-          <StatusPill status={statusForPill} />
-        </div>
-
-        <div className="relative bg-[var(--color-surface-sunken)]">
-          {camStatus === "denied" && (
-            <Alert tone="danger" title="Camera access denied" className="m-4">
-              Allow camera permission from the browser&apos;s address bar, then reload this page.
-            </Alert>
-          )}
-          {camStatus === "lost" && (
-            <Alert tone="warning" title="Camera disconnected" className="m-4">
-              Reconnect your camera and reload to continue.
-            </Alert>
-          )}
-          {landmarkerError && (
-            <Alert tone="danger" title="MediaPipe failed to load" className="m-4">
-              {landmarkerError}
-            </Alert>
-          )}
-
-          {camStatus === "ok" && (
-            <div className="relative bg-black">
-              <video
-                ref={videoRef}
-                width={VIDEO_W}
-                height={VIDEO_H}
-                muted
-                playsInline
-                aria-label="Your live camera preview with hand landmark overlay"
-                className="block w-full -scale-x-100"
-              />
-              <LandmarkOverlay
-                result={landmarkerResult}
-                width={VIDEO_W}
-                height={VIDEO_H}
-              />
-              {latencyMs !== null && (
-                <Badge
-                  tone="neutral"
-                  className="absolute right-3 top-3 border-none bg-black/55 text-white backdrop-blur"
-                >
-                  <Zap className="size-3" aria-hidden />
-                  <span className="font-mono tabular-nums">{latencyMs} ms</span>
-                  <span className="sr-only">round-trip latency</span>
-                </Badge>
-              )}
-              {captureStatus === "signing" && !paused && (
-                <div className="absolute inset-x-3 bottom-3">
-                  <Progress
-                    value={Math.round(captureProgress * 100)}
-                    tone="brand"
-                    aria-label={`Capture progress ${Math.round(captureProgress * 100)} percent`}
-                  />
-                </div>
-              )}
+    <div className="flex flex-1 flex-col gap-3">
+      {/* TILE GRID — symmetric, Meet-style */}
+      <div className="grid flex-1 gap-3 lg:grid-cols-2">
+        {/* OWN TILE */}
+        <Card className="flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5">
+            <div className="inline-flex items-center gap-2">
+              <UserRound className="size-4 text-[var(--color-text-muted)]" aria-hidden />
+              <span className="eyebrow">You (Signer)</span>
             </div>
-          )}
-        </div>
+            <StatusPill status={statusForPill} />
+          </div>
 
-        {/* BOTTOM CONTROLS */}
-        <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 bg-[var(--color-surface-sunken)]">
+            {camStatus === "denied" && (
+              <Alert tone="danger" title="Camera access denied" className="m-4">
+                Allow camera permission from the browser&apos;s address bar, then reload this page.
+              </Alert>
+            )}
+            {camStatus === "lost" && (
+              <Alert tone="warning" title="Camera disconnected" className="m-4">
+                Reconnect your camera and reload to continue.
+              </Alert>
+            )}
+            {landmarkerError && (
+              <Alert tone="danger" title="MediaPipe failed to load" className="m-4">
+                {landmarkerError}
+              </Alert>
+            )}
+
+            {camStatus === "ok" && (
+              <div className="relative h-full bg-black">
+                <video
+                  ref={videoRef}
+                  width={VIDEO_W}
+                  height={VIDEO_H}
+                  muted
+                  playsInline
+                  aria-label="Your live camera preview with hand landmark overlay"
+                  className="block h-full w-full -scale-x-100 object-cover"
+                />
+                <LandmarkOverlay
+                  result={landmarkerResult}
+                  width={VIDEO_W}
+                  height={VIDEO_H}
+                />
+                {latencyMs !== null && (
+                  <Badge
+                    tone="neutral"
+                    className="absolute right-3 top-3 border-none bg-black/55 text-white backdrop-blur"
+                  >
+                    <Zap className="size-3" aria-hidden />
+                    <span className="font-mono tabular-nums">{latencyMs} ms</span>
+                    <span className="sr-only">round-trip latency</span>
+                  </Badge>
+                )}
+                {topCandidate && !wordPrediction?.error && (
+                  <div className="absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-2">
+                    <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-black/55 px-3 py-1.5 backdrop-blur">
+                      <span className="text-xs uppercase tracking-wider text-white/70">Sign</span>
+                      <span className="text-base font-bold text-white">{topCandidate.label}</span>
+                      <span className="font-mono text-xs text-white/70">
+                        {Math.round(topCandidate.confidence * 100)}%
+                      </span>
+                    </div>
+                    {candidates.length > 1 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {candidates.slice(1, 5).map((c) => (
+                          <button
+                            key={c.label}
+                            type="button"
+                            onClick={() => onPrediction?.(c.label, c.confidence, Date.now())}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white backdrop-blur transition hover:bg-black/70 focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-white/80"
+                            aria-label={`Use ${c.label} instead — ${Math.round(c.confidence * 100)} percent confidence`}
+                          >
+                            <span>{c.label}</span>
+                            <span className="font-mono text-[0.65rem] text-white/70">
+                              {Math.round(c.confidence * 100)}%
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {captureStatus === "signing" && !paused && (
+                  <div className="absolute inset-x-3 bottom-3">
+                    <Progress
+                      value={Math.round(captureProgress * 100)}
+                      tone="brand"
+                      aria-label={`Capture progress ${Math.round(captureProgress * 100)} percent`}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* PEER TILE */}
+        <Card className="flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5">
+            <div className="inline-flex items-center gap-2">
+              <Users className="size-4 text-[var(--color-text-muted)]" aria-hidden />
+              <span className="eyebrow">Hearing partner</span>
+            </div>
+            {!peerPresent && (
+              <Badge tone="warning" className="text-[0.65rem]">Waiting…</Badge>
+            )}
+          </div>
+          <div className="relative flex-1 bg-black">
+            <RemoteVideo
+              stream={remoteStream}
+              className="h-full w-full object-cover"
+            />
+            <VideoCaptionOverlay
+              captions={captions}
+              filter="speech"
+              emptyHint={peerPresent ? "When your partner speaks, captions appear here." : "Waiting for partner…"}
+            />
+          </div>
+        </Card>
+      </div>
+
+      {/* BOTTOM CONTROL BAR */}
+      <Card className="px-4 py-3">
+        {wordPrediction?.error ? (
+          <Alert tone="danger" title="Couldn't read that sign">
+            Try again — make sure your hand is fully in frame and hold the sign steadily.
+          </Alert>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               variant={paused ? "primary" : "secondary"}
+              size="sm"
               onClick={togglePaused}
               aria-pressed={paused}
             >
               {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
               {paused ? "Resume" : "Pause"}
             </Button>
-            <Button variant="secondary" onClick={reset}>
+            <Button variant="secondary" size="sm" onClick={reset}>
               <RotateCcw aria-hidden /> Reset
             </Button>
             <span className="ml-auto text-xs text-[var(--color-text-muted)]">
               {paused
                 ? "Paused — press Resume when ready"
                 : captureStatus === "signing"
-                  ? "Hold the sign — we’re reading it…"
+                  ? "Hold the sign — we're reading it…"
                   : captureStatus === "processing"
                     ? "Recognising…"
                     : "Start signing whenever you're ready"}
             </span>
           </div>
-        </div>
+        )}
       </Card>
-
-      {/* RIGHT RAIL — prediction + confidence + peer captions */}
-      <div className="flex flex-col gap-4">
-        <Card className="p-5">
-          {wordPrediction?.error ? (
-            <Alert tone="danger" title="Couldn't read that sign">
-              Try again — make sure your hand is fully in frame and hold the sign steadily.
-            </Alert>
-          ) : (
-            <>
-              <LivePredictionBadge
-                candidates={candidates}
-                onSelect={(label) => {
-                  const conf = candidates.find((c) => c.label === label)?.confidence ?? 0;
-                  onPrediction?.(label, conf, Date.now());
-                }}
-              />
-              {topCandidate && (
-                <div className="mt-5">
-                  <ConfidenceMeter value={topCandidate.confidence} size="md" />
-                </div>
-              )}
-            </>
-          )}
-        </Card>
-
-        <Card className="flex-1 p-4">
-          <div className="mb-2 inline-flex items-center gap-2">
-            <span className="eyebrow">From hearing partner</span>
-            {!peerPresent && (
-              <Badge tone="warning" className="text-[0.65rem]">Waiting…</Badge>
-            )}
-          </div>
-          <CaptionsPanel
-            captions={captions}
-            filter="speech"
-            emptyHint="When your hearing partner speaks, their captions appear here."
-          />
-        </Card>
-
-        <Card className="overflow-hidden">
-          <div className="px-4 py-2 border-b border-[var(--color-border)] eyebrow">
-            Hearing partner
-          </div>
-          <RemoteVideo stream={remoteStream} className="aspect-video w-full bg-[var(--color-surface-sunken)]" />
-        </Card>
-      </div>
     </div>
   );
 }
