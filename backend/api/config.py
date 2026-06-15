@@ -7,6 +7,12 @@ Environment variable overrides
 -------------------------------
 SIGNLEARN_MODEL_PATH   Path to the .keras or .onnx checkpoint to serve.
                        Default: artifacts/checkpoints/tcn_best.onnx
+SIGNLEARN_WORD_MODEL_PATH
+                       Optional path to a separate word-recognition checkpoint
+                       (.keras or .onnx).  When set, callers may load this
+                       additionally via WORD_MODEL_PATH for a parallel word
+                       prediction stream.  Default: unset (word model not
+                       served; letter/digit model remains the only stream).
 SIGNLEARN_SECRET_KEY   Flask secret key (required for session cookies in tests).
 SIGNLEARN_ADMIN_TOKEN  Token required by POST /admin/reload.  If unset the
                        endpoint returns 403 (disabled).
@@ -32,6 +38,14 @@ _ASYNC_MODE = os.environ.get("SIGNLEARN_ASYNC_MODE", "threading")
 # Winner: TCN · raw · lr=5e-4 → 97.53% val acc, p95=0.23ms (4889 fps).
 _DEFAULT_MODEL = _REPO_ROOT / "artifacts" / "checkpoints" / "tcn_best.onnx"
 _MODEL_PATH = Path(os.environ["SIGNLEARN_MODEL_PATH"]) if os.environ.get("SIGNLEARN_MODEL_PATH") else _DEFAULT_MODEL
+
+# Optional word-recognition checkpoint, opt-in via env var.  Unset by default
+# so the existing letter/digit serving path is unaffected.
+WORD_MODEL_PATH = (
+    Path(os.environ["SIGNLEARN_WORD_MODEL_PATH"])
+    if os.environ.get("SIGNLEARN_WORD_MODEL_PATH")
+    else None
+)
 
 _DEFAULT_CORS = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
 _CORS_ORIGINS = tuple(
