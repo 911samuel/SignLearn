@@ -114,8 +114,17 @@ function RoomInner({
     [emitSpeech],
   );
 
-  const connectionStatus: Status =
-    status === "connected" ? "ok" : status === "reconnecting" ? "processing" : "disconnected";
+  // A WebSocket "connected" status without a successful room join is
+  // misleading — the user can't actually do anything in the room.  Treat
+  // join failure as disconnected so the header badge doesn't contradict the
+  // red "Room does not exist" banner below.
+  const connectionStatus: Status = joinError
+    ? "disconnected"
+    : status === "connected"
+      ? "ok"
+      : status === "reconnecting"
+        ? "processing"
+        : "disconnected";
 
   async function copyCode() {
     try {
