@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ONNX_PATH = REPO_ROOT / "artifacts" / "checkpoints" / "tcn_word_best.onnx"
 # Class-name source — same file the backend reads via
 # backend.api.model_loader._WORD_VOCAB_PATH.
-VOCAB_PATH = REPO_ROOT / "configs" / "word_curated_v3.txt"
+VOCAB_PATH = REPO_ROOT / "configs" / "word_curated_v6_27cls.txt"
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "word_smoke"
 
 TARGET_SEQ_LEN = 80
