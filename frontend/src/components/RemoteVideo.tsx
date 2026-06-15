@@ -58,6 +58,17 @@ export function RemoteVideo({ stream, muted = false, style, className }: RemoteV
           </span>
         </button>
       )}
+      {!stream && !needsTap && (
+        // No stream yet — distinguishes "still connecting" from "video failed
+        // to autoplay" so the peer tile isn't a silent black box for 2-3s
+        // during the WebRTC handshake.
+        <div
+          aria-live="polite"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-white/70"
+        >
+          Connecting…
+        </div>
+      )}
     </div>
   );
 }
