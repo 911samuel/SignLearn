@@ -21,8 +21,8 @@ import numpy as np
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RUN_DIR = REPO_ROOT / "artifacts" / "runs" / "word-curated-v3-64cls"
-ONNX_PATH = RUN_DIR / "tcn_word_v3.onnx"
+RUN_DIR = REPO_ROOT / "artifacts" / "runs" / "word-curated-v3-64cls-seed1"
+ONNX_PATH = RUN_DIR / "tcn_word_v3_seed1.onnx"
 LABEL_MAP = RUN_DIR / "word_label_map.json"
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "word_smoke"
 
