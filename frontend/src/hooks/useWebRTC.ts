@@ -43,6 +43,7 @@ export function useWebRTC(
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [state, setState] = useState<IceState>("new");
+  const [peerReady, setPeerReady] = useState(false);
 
   // Build / tear down the peer connection alongside the socket.
   useEffect(() => {
@@ -50,15 +51,17 @@ export function useWebRTC(
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
-    const remote = new MediaStream();
-    setRemoteStream(remote);
 
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
+    // Use the remote stream from the ontrack event directly.  An empty
+    // MediaStream + mutation pattern silently fails because React doesn't
+    // notice the mutation, and <video srcObject> is only re-assigned on
+    // reference change.  Promoting the event's stream into state forces the
+    // RemoteVideo component to re-render with a stream that already has tracks.
     pc.ontrack = (ev) => {
-      ev.streams[0].getTracks().forEach((t) => {
-        if (!remote.getTracks().includes(t)) remote.addTrack(t);
-      });
+      const stream = ev.streams[0];
+      if (stream) setRemoteStream(stream);
     };
 
     pc.onicecandidate = (ev) => {
@@ -88,36 +91,54 @@ export function useWebRTC(
       }
     };
 
+    const handlePeerReady = () => setPeerReady(true);
+
     socket.on("webrtc_offer", handleOffer);
     socket.on("webrtc_answer", handleAnswer);
     socket.on("webrtc_ice", handleIce);
+    socket.on("webrtc_ready", handlePeerReady);
+
+    // Announce that our peer connection is built and listeners are wired.
+    // The initiator uses this signal to (re-)send the offer, fixing the race
+    // where the initiator emits before the answerer has a pc.
+    socket.emit("webrtc_ready", {});
 
     return () => {
       socket.off("webrtc_offer", handleOffer);
       socket.off("webrtc_answer", handleAnswer);
       socket.off("webrtc_ice", handleIce);
+      socket.off("webrtc_ready", handlePeerReady);
       pc.close();
       pcRef.current = null;
+      setPeerReady(false);
     };
   }, [socket, localStream]);
 
-  // When the peer arrives (or we're the initiator and they're already present),
-  // send an offer.
+  // Initiator sends an offer once the peer is both present (room_state) and
+  // ready (their pc + listeners exist). We also re-offer if `peerReady` fires
+  // again after a peer rejoin.
   useEffect(() => {
     const pc = pcRef.current;
-    if (!pc || !socket || !isInitiator || !peerPresent) return;
-    if (pc.signalingState !== "stable") return;
+    if (!pc || !socket || !isInitiator || !peerPresent || !peerReady) return;
 
     let cancelled = false;
     (async () => {
-      const offer = await pc.createOffer();
-      if (cancelled) return;
-      await pc.setLocalDescription(offer);
-      socket.emit("webrtc_offer", { sdp: offer });
+      try {
+        // If we're mid-negotiation, roll back to stable before re-offering.
+        if (pc.signalingState !== "stable") {
+          await pc.setLocalDescription({ type: "rollback" }).catch(() => {});
+        }
+        const offer = await pc.createOffer();
+        if (cancelled) return;
+        await pc.setLocalDescription(offer);
+        socket.emit("webrtc_offer", { sdp: offer });
+      } catch (err) {
+        console.warn("[useWebRTC] offer failed:", err);
+      }
     })();
 
     return () => { cancelled = true; };
-  }, [socket, isInitiator, peerPresent]);
+  }, [socket, isInitiator, peerPresent, peerReady]);
 
   return { remoteStream, state };
 }
