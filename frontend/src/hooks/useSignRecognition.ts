@@ -46,12 +46,21 @@ export function useSignRecognition(
   // Unified utterance — accumulates BOTH word predictions and fingerspelled
   // letters in the order they arrive.  Letters within the same finger-spell
   // run concatenate (S, A, M → "SAM"); words and letter-runs are separated
-  // by a single space ("hello SAM coffee").  Clears after IDLE_CLEAR_MS of
-  // nothing arriving, or on manual reset.
+  // by a single space ("hello SAM coffee").  Closes when the signer drops
+  // their hands out of frame (end-of-turn signal in ASL), on manual reset,
+  // or after IDLE_CLEAR_MS of nothing arriving.
   const [utterance, setUtterance] = useState<string>("");
+  // When an utterance closes, it briefly appears as `sentUtterance` so the
+  // signer sees a "Sent" confirmation before the row clears.
+  const [sentUtterance, setSentUtterance] = useState<string | null>(null);
   const lastLetterRef = useRef<string | null>(null);
   const lastWasLetterRef = useRef<boolean>(false);
   const utteranceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sentFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const framesWithoutHandRef = useRef<number>(0);
+  // ~2 seconds of hand-out-of-frame at 30fps = end of utterance.
+  const HAND_DOWN_FRAMES_TO_CLOSE = 60;
+  const SENT_FLASH_MS = 1500;
   const IDLE_CLEAR_MS = 10_000;
 
   const scheduleUtteranceClear = useCallback(() => {
@@ -61,6 +70,33 @@ export function useSignRecognition(
       lastLetterRef.current = null;
       lastWasLetterRef.current = false;
     }, IDLE_CLEAR_MS);
+  }, []);
+
+  // Commit the current utterance as "done" — drops the hands signal in ASL.
+  // Flashes the finalized text as `sentUtterance` then clears the row so
+  // the next utterance starts fresh.  Per-word captions have already been
+  // streamed to the room via the backend's caption emit; this gives the
+  // signer (and the conversation log) a visible end-of-sentence boundary.
+  const commitUtterance = useCallback(() => {
+    setUtterance((prev) => {
+      if (!prev) return prev;
+      // Snapshot the text into the flash slot and tell the room.
+      setSentUtterance(prev);
+      const sock = socketRef.current;
+      if (sock) sock.emit("utterance_complete", { text: prev, t: Date.now() });
+      if (sentFlashTimerRef.current) clearTimeout(sentFlashTimerRef.current);
+      sentFlashTimerRef.current = setTimeout(
+        () => setSentUtterance(null),
+        SENT_FLASH_MS,
+      );
+      lastLetterRef.current = null;
+      lastWasLetterRef.current = false;
+      if (utteranceTimerRef.current) {
+        clearTimeout(utteranceTimerRef.current);
+        utteranceTimerRef.current = null;
+      }
+      return "";
+    });
   }, []);
   const [landmarkerResult, setLandmarkerResult] = useState<HandLandmarkerResult | null>(null);
   const [paused, setPaused] = useState(false);
@@ -215,6 +251,23 @@ export function useSignRecognition(
       const landmarks = flattenLandmarks(result);
       const hasHand = landmarks.some((v) => v !== 0);
 
+      // End-of-utterance detection — when the signer drops their hands out
+      // of frame for HAND_DOWN_FRAMES_TO_CLOSE consecutive frames (~2s),
+      // finalize whatever's accumulated so far.  Only triggers while the
+      // word capture state machine is idle so we don't kill an in-flight
+      // word capture from the user re-positioning their hand briefly.
+      if (!hasHand) {
+        framesWithoutHandRef.current++;
+        if (
+          framesWithoutHandRef.current === HAND_DOWN_FRAMES_TO_CLOSE &&
+          stateRef.current === "idle"
+        ) {
+          commitUtterance();
+        }
+      } else {
+        framesWithoutHandRef.current = 0;
+      }
+
       // Letter/digit pipeline — stream every frame to the backend, but
       // ONLY while the word capture state machine is idle.  During a word
       // capture, the same moving hand would otherwise feed the letter
@@ -312,7 +365,7 @@ export function useSignRecognition(
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [videoRef]);
+  }, [videoRef, commitUtterance]);
 
   const reset = useCallback(() => {
     wordBufferRef.current = [];
@@ -322,11 +375,17 @@ export function useSignRecognition(
     setCaptureStatus("idle");
     setCaptureProgress(0);
     setUtterance("");
+    setSentUtterance(null);
     lastLetterRef.current = null;
     lastWasLetterRef.current = false;
+    framesWithoutHandRef.current = 0;
     if (utteranceTimerRef.current) {
       clearTimeout(utteranceTimerRef.current);
       utteranceTimerRef.current = null;
+    }
+    if (sentFlashTimerRef.current) {
+      clearTimeout(sentFlashTimerRef.current);
+      sentFlashTimerRef.current = null;
     }
     setPrediction({ label: null, confidence: null, ready: false });
     setWordPrediction(null);
@@ -352,6 +411,8 @@ export function useSignRecognition(
   return {
     prediction,
     utterance,
+    sentUtterance,
+    commitUtterance,
     wordPrediction,
     captureStatus,
     captureProgress,

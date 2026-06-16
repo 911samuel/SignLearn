@@ -37,6 +37,8 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
 
   const {
     utterance,
+    sentUtterance,
+    commitUtterance,
     wordPrediction,
     captureStatus,
     captureProgress,
@@ -174,14 +176,29 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
                     <span className="sr-only">round-trip latency</span>
                   </Badge>
                 )}
-                {utterance && (
+                {sentUtterance ? (
+                  <div className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)]">
+                    <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-emerald-600/70 px-3 py-1.5 backdrop-blur">
+                      <span className="text-xs uppercase tracking-wider text-white/85">Sent ✓</span>
+                      <span className="text-base font-bold tracking-wide text-white">{sentUtterance}</span>
+                    </div>
+                  </div>
+                ) : utterance ? (
                   <div className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)]">
                     <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-black/55 px-3 py-1.5 backdrop-blur">
                       <span className="text-xs uppercase tracking-wider text-white/70">You</span>
                       <span className="text-base font-bold tracking-wide text-white">{utterance}</span>
+                      <button
+                        type="button"
+                        onClick={commitUtterance}
+                        className="ml-1 inline-flex items-center justify-center rounded-full bg-white/15 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wider text-white/90 transition hover:bg-white/25 focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-white/80"
+                        aria-label="Send utterance now"
+                      >
+                        Send
+                      </button>
                     </div>
                   </div>
-                )}
+                ) : null}
                 {captureStatus === "signing" && !paused && (
                   <div className="absolute inset-x-3 bottom-3">
                     <Progress

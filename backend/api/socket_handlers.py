@@ -204,6 +204,35 @@ def register(socketio: SocketIO) -> None:
         emit("reset_ack", {})
 
     # ------------------------------------------------------------------
+    # Utterance completion — signer dropped their hands.
+    #
+    # The client has been streaming per-word captions through the model
+    # pipelines already; this event delivers the consolidated sentence
+    # (words + fingerspelled runs joined in order) as a single caption
+    # row so the hearing user gets a clean end-of-turn marker in the
+    # conversation transcript.
+    # ------------------------------------------------------------------
+    @socketio.on("utterance_complete")
+    def on_utterance_complete(data: dict):
+        sid = request.sid
+        room = STORE.room_for_sid(sid)
+        if room is None:
+            return
+        member = room.members.get(sid)
+        if member is None or member.role != "signer":
+            return
+        text = (data or {}).get("text")
+        if not isinstance(text, str) or not text.strip():
+            return
+        socketio.emit("caption", {
+            "source": "utterance",
+            "text": text.strip(),
+            "confidence": None,
+            "name": member.name,
+            "ts": int(time.time() * 1000),
+        }, to=room.id)
+
+    # ------------------------------------------------------------------
     # Word capture (hold-to-sign)
     #
     # Client buffers 80 frames locally during a hold gesture and sends the
