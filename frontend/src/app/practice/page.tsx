@@ -4,6 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Eye, EyeOff, Flame, RotateCcw, Shuffle, Target, XCircle } from "lucide-react";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
+import { useRoom } from "@/hooks/useRoom";
+import { BACKEND_URL } from "@/lib/api";
+
+const DIGIT_NAMES = new Set([
+  "zero", "one", "two", "three", "four",
+  "five", "six", "seven", "eight", "nine",
+]);
+function isLetterOrDigit(t: string): boolean {
+  return /^[a-z]$/.test(t) || DIGIT_NAMES.has(t);
+}
 import { LandmarkOverlay } from "@/components/LandmarkOverlay";
 import { PermissionGate } from "@/components/PermissionGate";
 import { PageShell } from "@/components/primitives/PageShell";
@@ -34,7 +44,24 @@ export default function PracticePage() {
   const [outcome, setOutcome] = useState<"hit" | "miss" | null>(null);
   const progress = useProgress();
 
+  // Allocate a one-off room so the backend treats us as a valid signer.
+  // No peer ever joins; this is the minimum scaffolding to reuse the
+  // existing recognition pipeline in a single-user practice page.
+  const [roomId, setRoomId] = useState<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BACKEND_URL}/rooms`, { method: "POST" })
+      .then((r) => r.json())
+      .then((d: { room_id?: string }) => {
+        if (!cancelled && d.room_id) setRoomId(d.room_id);
+      })
+      .catch(() => { /* recognition just won't fire without a room */ });
+    return () => { cancelled = true; };
+  }, []);
+  const { socket } = useRoom(roomId, "signer", "Learner");
+
   const {
+    prediction,
     wordPrediction,
     captureStatus,
     captureProgress,
@@ -43,10 +70,28 @@ export default function PracticePage() {
     paused,
     togglePaused,
     latencyMs,
-  } = useSignRecognition(videoRef, null);
+  } = useSignRecognition(videoRef, socket);
 
-  // When a fresh prediction lands, compare against the target.
+  const targetIsLetterOrDigit = isLetterOrDigit(target);
+
+  // Letter/digit target: score the latest letter-pipeline prediction.
   useEffect(() => {
+    if (!targetIsLetterOrDigit) return;
+    if (!prediction?.ready || !prediction.label) return;
+    const hit = prediction.label === target;
+    setOutcome(hit ? "hit" : "miss");
+    setStreak((s) => (hit ? s + 1 : 0));
+    recordAttempt(prediction.label, hit, prediction.confidence ?? 0);
+    if (hit) {
+      try { navigator.vibrate?.(25); } catch {}
+    }
+    const id = window.setTimeout(() => setOutcome(null), 1400);
+    return () => window.clearTimeout(id);
+  }, [prediction, target, targetIsLetterOrDigit]);
+
+  // Word target: score the latest word-pipeline prediction.
+  useEffect(() => {
+    if (targetIsLetterOrDigit) return;
     if (!wordPrediction || wordPrediction.error) return;
     const best = wordPrediction.top3?.[0];
     if (!best) return;
@@ -59,7 +104,7 @@ export default function PracticePage() {
     }
     const id = window.setTimeout(() => setOutcome(null), 1400);
     return () => window.clearTimeout(id);
-  }, [wordPrediction, target]);
+  }, [wordPrediction, target, targetIsLetterOrDigit]);
 
   async function requestCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -258,16 +303,22 @@ export default function PracticePage() {
 
           <Card className="p-5">
             <p className="eyebrow">Latest reading</p>
-            {wordPrediction?.top3?.[0] ? (
-              <>
-                <p className="mt-2 heading-h2 text-[var(--color-text)]">
-                  {wordPrediction.top3[0].label}
-                </p>
-                <ConfidenceMeter value={wordPrediction.top3[0].confidence} className="mt-3" />
-              </>
-            ) : (
-              <p className="mt-2 text-[var(--color-text-faint)]">Sign something to see a reading.</p>
-            )}
+            {(() => {
+              const latestLabel = targetIsLetterOrDigit
+                ? prediction?.label
+                : wordPrediction?.top3?.[0]?.label;
+              const latestConf = targetIsLetterOrDigit
+                ? (prediction?.confidence ?? 0)
+                : (wordPrediction?.top3?.[0]?.confidence ?? 0);
+              return latestLabel ? (
+                <>
+                  <p className="mt-2 heading-h2 text-[var(--color-text)]">{latestLabel}</p>
+                  <ConfidenceMeter value={latestConf} className="mt-3" />
+                </>
+              ) : (
+                <p className="mt-2 text-[var(--color-text-faint)]">Sign something to see a reading.</p>
+              );
+            })()}
           </Card>
 
           {a11yMode && (
