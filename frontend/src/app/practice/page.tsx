@@ -106,20 +106,35 @@ export default function PracticePage() {
     return () => window.clearTimeout(id);
   }, [wordPrediction, target, targetIsLetterOrDigit]);
 
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+
   async function requestCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: VIDEO_W, height: VIDEO_H },
       audio: false,
     });
+    setLocalStream(stream);
     setCamStatus("ok");
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(() => {});
-    }
     stream.getVideoTracks().forEach((tr) => {
       tr.onended = () => setCamStatus("lost");
     });
   }
+
+  // Attach the stream once the <video> element is mounted (after
+  // camStatus flips to "ok").  Assigning srcObject inside requestCamera
+  // would no-op because videoRef.current is still null while the
+  // "pending" branch is rendered.
+  useEffect(() => {
+    if (camStatus !== "ok" || !localStream || !videoRef.current) return;
+    videoRef.current.srcObject = localStream;
+    videoRef.current.play().catch(() => {});
+  }, [camStatus, localStream]);
+
+  useEffect(() => {
+    return () => {
+      localStream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [localStream]);
 
   if (camStatus === "pending") {
     return (

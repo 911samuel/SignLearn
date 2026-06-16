@@ -116,17 +116,33 @@ export default function LessonPage() {
     return Math.round((hits / lesson.signs.length) * 100);
   }, [attempts, lesson]);
 
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+
   async function requestCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: VIDEO_W, height: VIDEO_H },
       audio: false,
     });
+    setLocalStream(stream);
     setCamStatus("ok");
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(() => {});
-    }
   }
+
+  // Attach the stream AFTER React mounts the <video> element (camStatus
+  // flips to "ok" → next render mounts the tag → effect assigns srcObject).
+  // If we tried to assign in requestCamera() the ref would still be null
+  // because the "pending" branch doesn't render the video tag at all.
+  useEffect(() => {
+    if (camStatus !== "ok" || !localStream || !videoRef.current) return;
+    videoRef.current.srcObject = localStream;
+    videoRef.current.play().catch(() => {});
+  }, [camStatus, localStream]);
+
+  // Release the camera when leaving the lesson.
+  useEffect(() => {
+    return () => {
+      localStream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [localStream]);
 
   if (!lesson) {
     return (
