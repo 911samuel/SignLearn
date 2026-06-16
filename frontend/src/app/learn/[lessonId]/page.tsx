@@ -228,9 +228,29 @@ export default function LessonPage() {
           : "idle";
 
   const currentOutcome = target ? attempts[target] : undefined;
-  const lastConfidence = targetIsLetterOrDigit
-    ? (prediction?.confidence ?? 0)
-    : (wordPrediction?.top3?.[0]?.confidence ?? 0);
+
+  // Stable "latest reading" — the pipeline emits null between confident
+  // predictions, which would make the card flicker between a label and the
+  // empty state.  Sticky-cache the last non-null reading per card so the
+  // value is visible from the first hit until the next real one arrives.
+  const [stickyReading, setStickyReading] = useState<{ label: string; confidence: number } | null>(null);
+  useEffect(() => {
+    // Clear when target changes — fresh card, fresh reading.
+    setStickyReading(null);
+  }, [target]);
+  useEffect(() => {
+    if (!targetIsLetterOrDigit) return;
+    if (!prediction?.ready || !prediction.label) return;
+    setStickyReading({ label: prediction.label, confidence: prediction.confidence ?? 0 });
+  }, [prediction, targetIsLetterOrDigit]);
+  useEffect(() => {
+    if (targetIsLetterOrDigit) return;
+    const best = wordPrediction?.top3?.[0];
+    if (!best || wordPrediction?.error) return;
+    setStickyReading({ label: best.label, confidence: best.confidence });
+  }, [wordPrediction, targetIsLetterOrDigit]);
+
+  const lastConfidence = stickyReading?.confidence ?? 0;
 
   function finishCard() {
     if (cardIdx + 1 < lesson!.signs.length) {
@@ -357,19 +377,14 @@ export default function LessonPage() {
 
             <Card className="p-5">
               <p className="eyebrow">Latest reading</p>
-              {(() => {
-                const latestLabel = targetIsLetterOrDigit
-                  ? prediction?.label
-                  : wordPrediction?.top3?.[0]?.label;
-                return latestLabel ? (
-                  <>
-                    <p className="mt-2 heading-h2 text-[var(--color-text)]">{latestLabel}</p>
-                    <ConfidenceMeter value={lastConfidence} className="mt-3" />
-                  </>
-                ) : (
-                  <p className="mt-2 text-[var(--color-text-faint)]">Sign to see a reading.</p>
-                );
-              })()}
+              {stickyReading ? (
+                <>
+                  <p className="mt-2 heading-h2 text-[var(--color-text)]">{stickyReading.label}</p>
+                  <ConfidenceMeter value={stickyReading.confidence} className="mt-3" />
+                </>
+              ) : (
+                <p className="mt-2 text-[var(--color-text-faint)]">Sign to see a reading.</p>
+              )}
             </Card>
 
             <Card className="p-5">

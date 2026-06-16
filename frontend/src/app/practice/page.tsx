@@ -74,6 +74,23 @@ export default function PracticePage() {
 
   const targetIsLetterOrDigit = isLetterOrDigit(target);
 
+  // Sticky "latest reading" so the card doesn't flicker between a label
+  // and the empty state — the letter pipeline emits nulls between
+  // confident predictions.  Cleared whenever the user picks a new target.
+  const [stickyReading, setStickyReading] = useState<{ label: string; confidence: number } | null>(null);
+  useEffect(() => { setStickyReading(null); }, [target]);
+  useEffect(() => {
+    if (!targetIsLetterOrDigit) return;
+    if (!prediction?.ready || !prediction.label) return;
+    setStickyReading({ label: prediction.label, confidence: prediction.confidence ?? 0 });
+  }, [prediction, targetIsLetterOrDigit]);
+  useEffect(() => {
+    if (targetIsLetterOrDigit) return;
+    const best = wordPrediction?.top3?.[0];
+    if (!best || wordPrediction?.error) return;
+    setStickyReading({ label: best.label, confidence: best.confidence });
+  }, [wordPrediction, targetIsLetterOrDigit]);
+
   // Letter/digit target: score the latest letter-pipeline prediction.
   useEffect(() => {
     if (!targetIsLetterOrDigit) return;
@@ -318,22 +335,14 @@ export default function PracticePage() {
 
           <Card className="p-5">
             <p className="eyebrow">Latest reading</p>
-            {(() => {
-              const latestLabel = targetIsLetterOrDigit
-                ? prediction?.label
-                : wordPrediction?.top3?.[0]?.label;
-              const latestConf = targetIsLetterOrDigit
-                ? (prediction?.confidence ?? 0)
-                : (wordPrediction?.top3?.[0]?.confidence ?? 0);
-              return latestLabel ? (
-                <>
-                  <p className="mt-2 heading-h2 text-[var(--color-text)]">{latestLabel}</p>
-                  <ConfidenceMeter value={latestConf} className="mt-3" />
-                </>
-              ) : (
-                <p className="mt-2 text-[var(--color-text-faint)]">Sign something to see a reading.</p>
-              );
-            })()}
+            {stickyReading ? (
+              <>
+                <p className="mt-2 heading-h2 text-[var(--color-text)]">{stickyReading.label}</p>
+                <ConfidenceMeter value={stickyReading.confidence} className="mt-3" />
+              </>
+            ) : (
+              <p className="mt-2 text-[var(--color-text-faint)]">Sign something to see a reading.</p>
+            )}
           </Card>
 
           {a11yMode && (
