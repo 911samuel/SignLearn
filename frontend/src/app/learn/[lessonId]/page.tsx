@@ -116,6 +116,27 @@ export default function LessonPage() {
     return Math.round((hits / lesson.signs.length) * 100);
   }, [attempts, lesson]);
 
+  // Stable "latest reading" — the pipeline emits null between confident
+  // predictions, which would make the card flicker between a label and the
+  // empty state.  Sticky-cache the last non-null reading per card so the
+  // value is visible from the first hit until the next real one arrives.
+  // (Declared above the early returns to satisfy Rules of Hooks.)
+  const [stickyReading, setStickyReading] = useState<{ label: string; confidence: number } | null>(null);
+  useEffect(() => {
+    setStickyReading(null);
+  }, [target]);
+  useEffect(() => {
+    if (!targetIsLetterOrDigit) return;
+    if (!prediction?.ready || !prediction.label) return;
+    setStickyReading({ label: prediction.label, confidence: prediction.confidence ?? 0 });
+  }, [prediction, targetIsLetterOrDigit]);
+  useEffect(() => {
+    if (targetIsLetterOrDigit) return;
+    const best = wordPrediction?.top3?.[0];
+    if (!best || wordPrediction?.error) return;
+    setStickyReading({ label: best.label, confidence: best.confidence });
+  }, [wordPrediction, targetIsLetterOrDigit]);
+
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   async function requestCamera() {
@@ -228,28 +249,6 @@ export default function LessonPage() {
           : "idle";
 
   const currentOutcome = target ? attempts[target] : undefined;
-
-  // Stable "latest reading" — the pipeline emits null between confident
-  // predictions, which would make the card flicker between a label and the
-  // empty state.  Sticky-cache the last non-null reading per card so the
-  // value is visible from the first hit until the next real one arrives.
-  const [stickyReading, setStickyReading] = useState<{ label: string; confidence: number } | null>(null);
-  useEffect(() => {
-    // Clear when target changes — fresh card, fresh reading.
-    setStickyReading(null);
-  }, [target]);
-  useEffect(() => {
-    if (!targetIsLetterOrDigit) return;
-    if (!prediction?.ready || !prediction.label) return;
-    setStickyReading({ label: prediction.label, confidence: prediction.confidence ?? 0 });
-  }, [prediction, targetIsLetterOrDigit]);
-  useEffect(() => {
-    if (targetIsLetterOrDigit) return;
-    const best = wordPrediction?.top3?.[0];
-    if (!best || wordPrediction?.error) return;
-    setStickyReading({ label: best.label, confidence: best.confidence });
-  }, [wordPrediction, targetIsLetterOrDigit]);
-
   const lastConfidence = stickyReading?.confidence ?? 0;
 
   function finishCard() {
