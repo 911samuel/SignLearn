@@ -43,6 +43,10 @@ export function useSignRecognition(
     confidence: null,
     ready: false,
   });
+  // Accumulated fingerspelling string — distinct letters concatenated as they
+  // arrive.  Cleared when a word capture starts (idle → signing transition).
+  const [letterBuffer, setLetterBuffer] = useState<string>("");
+  const lastLetterRef = useRef<string | null>(null);
   const [landmarkerResult, setLandmarkerResult] = useState<HandLandmarkerResult | null>(null);
   const [paused, setPaused] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -130,11 +134,21 @@ export function useSignRecognition(
 
   // Listen for letter/digit prediction events.  The backend's letter model
   // accumulates the last 30 frames server-side and emits a smoothed result;
-  // we just need to subscribe and update local state.
+  // we subscribe, update the pill, and append distinct labels onto a
+  // fingerspelling buffer so consecutive letters read as "SAM" not just "M".
   useEffect(() => {
     if (!socket) return;
     const letterHandler = (data: Prediction) => {
       setPrediction(data);
+      if (data.ready && data.label && data.label !== lastLetterRef.current) {
+        lastLetterRef.current = data.label;
+        // Letters and digits both come through here; render letters as
+        // uppercase for visual rhythm ("SAM" reads better than "sam").
+        const ch = /^[a-z]$/.test(data.label)
+          ? data.label.toUpperCase()
+          : data.label;
+        setLetterBuffer((prev) => prev + ch);
+      }
     };
     socket.on("prediction", letterHandler);
     return () => {
@@ -204,11 +218,14 @@ export function useSignRecognition(
           setStatus("signing");
           setCaptureProgress(1 / WORD_MAX_FRAMES);
           // Hand the channel over to the word pipeline cleanly: clear the
-          // server-side letter sliding window and hide any in-flight letter
-          // pill, so the just-finished fingerspelling stops competing with
-          // the incoming word prediction.
+          // server-side letter sliding window, the in-flight letter pill,
+          // and the accumulated fingerspelling string — so the
+          // just-finished spelling is not visually competing with the
+          // incoming word prediction.
           if (sock) sock.emit("reset");
           setPrediction({ label: null, confidence: null, ready: false });
+          setLetterBuffer("");
+          lastLetterRef.current = null;
         }
         return;
       }
@@ -273,6 +290,9 @@ export function useSignRecognition(
     stateRef.current = "idle";
     setCaptureStatus("idle");
     setCaptureProgress(0);
+    setLetterBuffer("");
+    lastLetterRef.current = null;
+    setPrediction({ label: null, confidence: null, ready: false });
     setWordPrediction(null);
   }, []);
 
@@ -295,6 +315,7 @@ export function useSignRecognition(
 
   return {
     prediction,
+    letterBuffer,
     wordPrediction,
     captureStatus,
     captureProgress,

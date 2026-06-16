@@ -37,6 +37,7 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
 
   const {
     prediction,
+    letterBuffer,
     wordPrediction,
     captureStatus,
     captureProgress,
@@ -182,11 +183,11 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
                     </div>
                   </div>
                 )}
-                {prediction?.ready && prediction.label && (
-                  <div className="absolute left-3 top-14">
+                {letterBuffer && (
+                  <div className="absolute left-3 top-14 max-w-[calc(100%-1.5rem)]">
                     <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-black/55 px-3 py-1.5 backdrop-blur">
-                      <span className="text-xs uppercase tracking-wider text-white/70">Letter</span>
-                      <span className="text-base font-bold text-white">{prediction.label}</span>
+                      <span className="text-xs uppercase tracking-wider text-white/70">Spell</span>
+                      <span className="text-base font-bold tracking-wider text-white">{letterBuffer}</span>
                     </div>
                   </div>
                 )}
