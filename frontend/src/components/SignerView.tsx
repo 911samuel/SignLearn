@@ -174,32 +174,11 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
                   </Badge>
                 )}
                 {topCandidate && !wordPrediction?.error && (
-                  <div className="absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-2">
+                  <div className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)]">
                     <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-black/55 px-3 py-1.5 backdrop-blur">
                       <span className="text-xs uppercase tracking-wider text-white/70">Sign</span>
                       <span className="text-base font-bold text-white">{topCandidate.label}</span>
-                      <span className="font-mono text-xs text-white/70">
-                        {Math.round(topCandidate.confidence * 100)}%
-                      </span>
                     </div>
-                    {candidates.length > 1 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {candidates.slice(1, 5).map((c) => (
-                          <button
-                            key={c.label}
-                            type="button"
-                            onClick={() => onPrediction?.(c.label, c.confidence, Date.now())}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white backdrop-blur transition hover:bg-black/70 focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-white/80"
-                            aria-label={`Use ${c.label} instead — ${Math.round(c.confidence * 100)} percent confidence`}
-                          >
-                            <span>{c.label}</span>
-                            <span className="font-mono text-[0.65rem] text-white/70">
-                              {Math.round(c.confidence * 100)}%
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
                 {captureStatus === "signing" && !paused && (
