@@ -2,7 +2,7 @@ big
 bye
 coffee
 cold
-deaf1
+deaf
 finish
 friend
 hearing
@@ -19,9 +19,9 @@ take
 teacher
 today
 understand
-want1
+want
 water
-welcome1
+welcome
 which
 who
 yes
