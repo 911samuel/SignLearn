@@ -169,12 +169,14 @@ export function useSignRecognition(
       const landmarks = flattenLandmarks(result);
       const hasHand = landmarks.some((v) => v !== 0);
 
-      // Letter/digit pipeline — stream every frame to the backend.  The
-      // server-side FrameBuffer accumulates the last 30 frames and emits
-      // smoothed "prediction" events (handled by the listener above).
-      // Independent of the word-capture state machine; both pipelines run
-      // in parallel against the same landmark stream.
-      if (sock && hasHand) {
+      // Letter/digit pipeline — stream every frame to the backend, but
+      // ONLY while the word capture state machine is idle.  During a word
+      // capture, the same moving hand would otherwise feed the letter
+      // sliding window and produce nonsense letter predictions that
+      // collide with the word prediction.  Suppressing here keeps the
+      // letter overlay quiet during words and active during stillness
+      // (fingerspelling) — the natural ASL boundary.
+      if (sock && hasHand && stateRef.current === "idle") {
         sock.emit("frame", { landmarks, t: Date.now() });
       }
 
@@ -201,6 +203,12 @@ export function useSignRecognition(
           idleFramesRef.current = 0;
           setStatus("signing");
           setCaptureProgress(1 / WORD_MAX_FRAMES);
+          // Hand the channel over to the word pipeline cleanly: clear the
+          // server-side letter sliding window and hide any in-flight letter
+          // pill, so the just-finished fingerspelling stops competing with
+          // the incoming word prediction.
+          if (sock) sock.emit("reset");
+          setPrediction({ label: null, confidence: null, ready: false });
         }
         return;
       }
