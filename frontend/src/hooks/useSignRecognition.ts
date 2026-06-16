@@ -43,10 +43,25 @@ export function useSignRecognition(
     confidence: null,
     ready: false,
   });
-  // Accumulated fingerspelling string — distinct letters concatenated as they
-  // arrive.  Cleared when a word capture starts (idle → signing transition).
-  const [letterBuffer, setLetterBuffer] = useState<string>("");
+  // Unified utterance — accumulates BOTH word predictions and fingerspelled
+  // letters in the order they arrive.  Letters within the same finger-spell
+  // run concatenate (S, A, M → "SAM"); words and letter-runs are separated
+  // by a single space ("hello SAM coffee").  Clears after IDLE_CLEAR_MS of
+  // nothing arriving, or on manual reset.
+  const [utterance, setUtterance] = useState<string>("");
   const lastLetterRef = useRef<string | null>(null);
+  const lastWasLetterRef = useRef<boolean>(false);
+  const utteranceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const IDLE_CLEAR_MS = 10_000;
+
+  const scheduleUtteranceClear = useCallback(() => {
+    if (utteranceTimerRef.current) clearTimeout(utteranceTimerRef.current);
+    utteranceTimerRef.current = setTimeout(() => {
+      setUtterance("");
+      lastLetterRef.current = null;
+      lastWasLetterRef.current = false;
+    }, IDLE_CLEAR_MS);
+  }, []);
   const [landmarkerResult, setLandmarkerResult] = useState<HandLandmarkerResult | null>(null);
   const [paused, setPaused] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -114,7 +129,8 @@ export function useSignRecognition(
     };
   }, []);
 
-  // Listen for word_prediction events; flip the capture state machine back to idle.
+  // Listen for word_prediction events; flip the capture state machine back to
+  // idle and append the top word to the unified utterance.
   useEffect(() => {
     if (!socket) return;
     const wordHandler = (data: WordPrediction) => {
@@ -125,36 +141,52 @@ export function useSignRecognition(
       stateRef.current = "idle";
       setCaptureStatus("idle");
       setCaptureProgress(0);
+      if (!data.error) {
+        const top = data.top3?.[0]?.label;
+        if (top) {
+          setUtterance((prev) => (prev ? `${prev} ${top}` : top));
+          lastWasLetterRef.current = false;
+          scheduleUtteranceClear();
+        }
+      }
     };
     socket.on("word_prediction", wordHandler);
     return () => {
       socket.off("word_prediction", wordHandler);
     };
-  }, [socket]);
+  }, [socket, scheduleUtteranceClear]);
 
   // Listen for letter/digit prediction events.  The backend's letter model
   // accumulates the last 30 frames server-side and emits a smoothed result;
-  // we subscribe, update the pill, and append distinct labels onto a
-  // fingerspelling buffer so consecutive letters read as "SAM" not just "M".
+  // we subscribe and append distinct labels onto the unified utterance.
+  // Consecutive letters in the same fingerspelling run concatenate (S, A, M
+  // → "SAM"); a letter following a word gets a leading space.
   useEffect(() => {
     if (!socket) return;
     const letterHandler = (data: Prediction) => {
       setPrediction(data);
       if (data.ready && data.label && data.label !== lastLetterRef.current) {
         lastLetterRef.current = data.label;
-        // Letters and digits both come through here; render letters as
-        // uppercase for visual rhythm ("SAM" reads better than "sam").
+        // Letters and digits both come through here; uppercase letters for
+        // visual rhythm ("SAM" reads better than "sam").
         const ch = /^[a-z]$/.test(data.label)
           ? data.label.toUpperCase()
           : data.label;
-        setLetterBuffer((prev) => prev + ch);
+        setUtterance((prev) => {
+          if (!prev) return ch;
+          // Continuing a fingerspell run: glue letters together.
+          // Starting a new letter run after a word: add a separator space.
+          return lastWasLetterRef.current ? prev + ch : `${prev} ${ch}`;
+        });
+        lastWasLetterRef.current = true;
+        scheduleUtteranceClear();
       }
     };
     socket.on("prediction", letterHandler);
     return () => {
       socket.off("prediction", letterHandler);
     };
-  }, [socket]);
+  }, [socket, scheduleUtteranceClear]);
 
   // rAF loop: extract landmarks → motion-gated auto-segment → emit word_predict
   useEffect(() => {
@@ -217,14 +249,13 @@ export function useSignRecognition(
           idleFramesRef.current = 0;
           setStatus("signing");
           setCaptureProgress(1 / WORD_MAX_FRAMES);
-          // Hand the channel over to the word pipeline cleanly: clear the
-          // server-side letter sliding window, the in-flight letter pill,
-          // and the accumulated fingerspelling string — so the
-          // just-finished spelling is not visually competing with the
-          // incoming word prediction.
+          // Hand the channel over to the word pipeline: flush the server
+          // letter sliding window and the in-flight letter pill so the
+          // pending letter doesn't get appended on top of the incoming
+          // word.  The unified utterance is preserved — letters already
+          // spelled stay in the row, the new word will append to them.
           if (sock) sock.emit("reset");
           setPrediction({ label: null, confidence: null, ready: false });
-          setLetterBuffer("");
           lastLetterRef.current = null;
         }
         return;
@@ -290,8 +321,13 @@ export function useSignRecognition(
     stateRef.current = "idle";
     setCaptureStatus("idle");
     setCaptureProgress(0);
-    setLetterBuffer("");
+    setUtterance("");
     lastLetterRef.current = null;
+    lastWasLetterRef.current = false;
+    if (utteranceTimerRef.current) {
+      clearTimeout(utteranceTimerRef.current);
+      utteranceTimerRef.current = null;
+    }
     setPrediction({ label: null, confidence: null, ready: false });
     setWordPrediction(null);
   }, []);
@@ -315,7 +351,7 @@ export function useSignRecognition(
 
   return {
     prediction,
-    letterBuffer,
+    utterance,
     wordPrediction,
     captureStatus,
     captureProgress,

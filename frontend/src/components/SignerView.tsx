@@ -36,8 +36,7 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   const {
-    prediction,
-    letterBuffer,
+    utterance,
     wordPrediction,
     captureStatus,
     captureProgress,
@@ -175,19 +174,11 @@ export function SignerView({ socket, captions, peerPresent, onPrediction }: Sign
                     <span className="sr-only">round-trip latency</span>
                   </Badge>
                 )}
-                {topCandidate && !wordPrediction?.error && (
+                {utterance && (
                   <div className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)]">
                     <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-black/55 px-3 py-1.5 backdrop-blur">
-                      <span className="text-xs uppercase tracking-wider text-white/70">Sign</span>
-                      <span className="text-base font-bold text-white">{topCandidate.label}</span>
-                    </div>
-                  </div>
-                )}
-                {letterBuffer && (
-                  <div className="absolute left-3 top-14 max-w-[calc(100%-1.5rem)]">
-                    <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-black/55 px-3 py-1.5 backdrop-blur">
-                      <span className="text-xs uppercase tracking-wider text-white/70">Spell</span>
-                      <span className="text-base font-bold tracking-wider text-white">{letterBuffer}</span>
+                      <span className="text-xs uppercase tracking-wider text-white/70">You</span>
+                      <span className="text-base font-bold tracking-wide text-white">{utterance}</span>
                     </div>
                   </div>
                 )}
