@@ -128,6 +128,20 @@ export function useSignRecognition(
     };
   }, [socket]);
 
+  // Listen for letter/digit prediction events.  The backend's letter model
+  // accumulates the last 30 frames server-side and emits a smoothed result;
+  // we just need to subscribe and update local state.
+  useEffect(() => {
+    if (!socket) return;
+    const letterHandler = (data: Prediction) => {
+      setPrediction(data);
+    };
+    socket.on("prediction", letterHandler);
+    return () => {
+      socket.off("prediction", letterHandler);
+    };
+  }, [socket]);
+
   // rAF loop: extract landmarks → motion-gated auto-segment → emit word_predict
   useEffect(() => {
     function setStatus(s: "idle" | "signing" | "processing") {
@@ -154,6 +168,15 @@ export function useSignRecognition(
 
       const landmarks = flattenLandmarks(result);
       const hasHand = landmarks.some((v) => v !== 0);
+
+      // Letter/digit pipeline — stream every frame to the backend.  The
+      // server-side FrameBuffer accumulates the last 30 frames and emits
+      // smoothed "prediction" events (handled by the listener above).
+      // Independent of the word-capture state machine; both pipelines run
+      // in parallel against the same landmark stream.
+      if (sock && hasHand) {
+        sock.emit("frame", { landmarks, t: Date.now() });
+      }
 
       // Compute frame-to-frame mean landmark displacement (motion energy).
       let motion = 0;
@@ -263,6 +286,7 @@ export function useSignRecognition(
   }, []);
 
   return {
+    prediction,
     wordPrediction,
     captureStatus,
     captureProgress,
