@@ -5,6 +5,21 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw, Sparkles, Target, Trophy, XCircle } from "lucide-react";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
+import { useRoom } from "@/hooks/useRoom";
+import { BACKEND_URL } from "@/lib/api";
+
+// Letter model emits digit class names as words: "zero".."nine".
+const DIGIT_NAMES = new Set([
+  "zero", "one", "two", "three", "four",
+  "five", "six", "seven", "eight", "nine",
+]);
+
+function isLetterTarget(t: string): boolean {
+  return /^[a-z]$/.test(t);
+}
+function isDigitTarget(t: string): boolean {
+  return DIGIT_NAMES.has(t);
+}
 import { LandmarkOverlay } from "@/components/LandmarkOverlay";
 import { PermissionGate } from "@/components/PermissionGate";
 import { PageShell } from "@/components/primitives/PageShell";
@@ -37,28 +52,63 @@ export default function LessonPage() {
   const [attempts, setAttempts] = useState<Record<string, "hit" | "miss" | undefined>>({});
   const [done, setDone] = useState(false);
 
+  // Allocate a one-off room so the backend treats us as a valid signer
+  // (frame handler returns early without a room).  No peer ever joins; this
+  // is just the cheapest way to wire the existing recognition pipeline into
+  // a single-user practice page.
+  const [roomId, setRoomId] = useState<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BACKEND_URL}/rooms`, { method: "POST" })
+      .then((r) => r.json())
+      .then((d: { room_id?: string }) => {
+        if (!cancelled && d.room_id) setRoomId(d.room_id);
+      })
+      .catch(() => { /* lesson still renders; predictions just won't fire */ });
+    return () => { cancelled = true; };
+  }, []);
+  const { socket } = useRoom(roomId, "signer", "Learner");
+
   const {
+    prediction,
     wordPrediction,
     captureStatus,
     captureProgress,
     landmarkerResult,
     reset,
     paused,
-  } = useSignRecognition(videoRef, null);
+  } = useSignRecognition(videoRef, socket);
 
   const target = lesson?.signs[cardIdx];
+  const targetIsLetterOrDigit = !!target && (isLetterTarget(target) || isDigitTarget(target));
 
+  // Letter/digit lessons match against the letter-model `prediction` stream.
   useEffect(() => {
-    if (!target || !wordPrediction || wordPrediction.error) return;
+    if (!target || !targetIsLetterOrDigit) return;
+    if (!prediction?.ready || !prediction.label) return;
+    if (attempts[target]) return; // already scored this card
+    const hit = prediction.label === target;
+    setAttempts((a) => ({ ...a, [target]: hit ? "hit" : "miss" }));
+    recordAttempt(prediction.label, hit, prediction.confidence ?? 0);
+    if (hit) {
+      try { navigator.vibrate?.(25); } catch {}
+    }
+  }, [prediction, target, targetIsLetterOrDigit, attempts]);
+
+  // Word lessons match against the word-model `wordPrediction` stream.
+  useEffect(() => {
+    if (!target || targetIsLetterOrDigit) return;
+    if (!wordPrediction || wordPrediction.error) return;
     const best = wordPrediction.top3?.[0];
     if (!best) return;
+    if (attempts[target]) return;
     const hit = best.label === target;
     setAttempts((a) => ({ ...a, [target]: hit ? "hit" : "miss" }));
     recordAttempt(best.label, hit, best.confidence);
     if (hit) {
       try { navigator.vibrate?.(25); } catch {}
     }
-  }, [wordPrediction, target]);
+  }, [wordPrediction, target, targetIsLetterOrDigit, attempts]);
 
   const score = useMemo(() => {
     if (!lesson) return 0;
@@ -162,7 +212,9 @@ export default function LessonPage() {
           : "idle";
 
   const currentOutcome = target ? attempts[target] : undefined;
-  const lastConfidence = wordPrediction?.top3?.[0]?.confidence ?? 0;
+  const lastConfidence = targetIsLetterOrDigit
+    ? (prediction?.confidence ?? 0)
+    : (wordPrediction?.top3?.[0]?.confidence ?? 0);
 
   function finishCard() {
     if (cardIdx + 1 < lesson!.signs.length) {
@@ -244,7 +296,19 @@ export default function LessonPage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] p-4">
-              <Button variant="ghost" onClick={reset}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  if (target) {
+                    setAttempts((a) => {
+                      const next = { ...a };
+                      delete next[target];
+                      return next;
+                    });
+                  }
+                  reset();
+                }}
+              >
                 <RotateCcw aria-hidden /> Retry sign
               </Button>
               <div className="flex gap-2">
@@ -277,16 +341,19 @@ export default function LessonPage() {
 
             <Card className="p-5">
               <p className="eyebrow">Latest reading</p>
-              {wordPrediction?.top3?.[0] ? (
-                <>
-                  <p className="mt-2 heading-h2 text-[var(--color-text)]">
-                    {wordPrediction.top3[0].label}
-                  </p>
-                  <ConfidenceMeter value={lastConfidence} className="mt-3" />
-                </>
-              ) : (
-                <p className="mt-2 text-[var(--color-text-faint)]">Sign to see a reading.</p>
-              )}
+              {(() => {
+                const latestLabel = targetIsLetterOrDigit
+                  ? prediction?.label
+                  : wordPrediction?.top3?.[0]?.label;
+                return latestLabel ? (
+                  <>
+                    <p className="mt-2 heading-h2 text-[var(--color-text)]">{latestLabel}</p>
+                    <ConfidenceMeter value={lastConfidence} className="mt-3" />
+                  </>
+                ) : (
+                  <p className="mt-2 text-[var(--color-text-faint)]">Sign to see a reading.</p>
+                );
+              })()}
             </Card>
 
             <Card className="p-5">

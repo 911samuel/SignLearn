@@ -41,6 +41,12 @@ export function useRoom(roomId: string, role: Role, name: string): UseRoomResult
   const idRef = useRef(0);
 
   useEffect(() => {
+    // Defer connecting until the caller has a real roomId.  Pages can
+    // allocate a room asynchronously (e.g. POST /rooms) and pass the
+    // result in once it arrives without the hook trying to join an
+    // empty room.
+    if (!roomId) return;
+
     const socket = io(BACKEND_URL, { transports: ["websocket"] });
     socketRef.current = socket;
 
