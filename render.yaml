@@ -23,3 +23,5 @@ services:
         sync: false           # Set after you know the Vercel URL.
       - key: SIGNLEARN_MODEL_PATH
         value: /app/artifacts/checkpoints/tcn_best.onnx
+      - key: SIGNLEARN_WORD_MODEL_PATH
+        value: /app/artifacts/checkpoints/tcn_word_best.onnx
