@@ -208,11 +208,12 @@ export function useSignRecognition(
         const ch = /^[a-z]$/.test(data.label)
           ? data.label.toUpperCase()
           : data.label;
+        const wasLetter = lastWasLetterRef.current;
         setUtterance((prev) => {
           if (!prev) return ch;
           // Continuing a fingerspell run: glue letters together.
           // Starting a new letter run after a word: add a separator space.
-          return lastWasLetterRef.current ? prev + ch : `${prev} ${ch}`;
+          return wasLetter ? prev + ch : `${prev} ${ch}`;
         });
         lastWasLetterRef.current = true;
         scheduleUtteranceClear();

@@ -207,7 +207,11 @@ export function HearingView({ socket, captions, peerPresent, onSpeech }: Hearing
               onPointerLeave={pressEnd}
               onClick={toggleClick}
               aria-pressed={listening}
-              aria-label={listening ? "Listening — release to stop" : "Push to talk"}
+              aria-label={
+                listening
+                  ? isToggleMode ? "Listening — tap to stop" : "Listening — release to stop"
+                  : isToggleMode ? "Tap to talk" : "Push to talk"
+              }
               className={cn(
                 "inline-flex h-12 min-w-[180px] select-none items-center justify-center gap-2 rounded-[var(--radius-md)] px-5 text-base font-bold transition focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus)] disabled:opacity-50",
                 listening

@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SignLearn — Defense Preparation Guide</title>
+<style>
+  :root{
+    --navy:#0A1F3D; --navy-soft:#152D55; --teal:#14B8A6; --teal-dark:#0F8F86;
+    --coral:#F87171; --coral-dark:#DC2626; --cream:#FAFAF7; --ink:#0F172A;
+    --slate:#475569; --slate-light:#94A3B8; --slate-bg:#F1F5F9;
+    --border:#E2E8F0; --tech:#3B82F6; --nontech:#A855F7;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color:var(--ink); background:var(--cream); line-height:1.6;
+  }
+  header.hero{
+    background:linear-gradient(135deg, var(--navy) 0%, var(--navy-soft) 100%);
+    color:#fff; padding:48px 32px; border-bottom:4px solid var(--teal);
+  }
+  header.hero h1{margin:0 0 8px; font-size:42px; letter-spacing:-0.5px}
+  header.hero p{margin:0; color:var(--slate-light); font-size:18px}
+  header.hero .meta{margin-top:24px; font-size:13px; color:var(--slate-light)}
+  header.hero .meta b{color:#fff}
+
+  nav.toc{
+    position:sticky; top:0; z-index:10;
+    background:#fff; border-bottom:1px solid var(--border);
+    padding:14px 32px; overflow-x:auto; white-space:nowrap;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+  }
+  nav.toc a{
+    display:inline-block; margin-right:18px; color:var(--slate);
+    text-decoration:none; font-size:13px; font-weight:600;
+    padding:6px 10px; border-radius:6px;
+  }
+  nav.toc a:hover{background:var(--slate-bg); color:var(--navy)}
+
+  main{max-width:980px; margin:0 auto; padding:32px}
+  section{margin-bottom:64px; scroll-margin-top:80px}
+  section > h2{
+    font-size:30px; color:var(--navy); margin:0 0 8px;
+    padding-bottom:8px; border-bottom:3px solid var(--teal);
+    display:inline-block;
+  }
+  section > .lead{
+    font-size:17px; color:var(--slate); margin:8px 0 28px; max-width:720px;
+  }
+  h3{color:var(--navy); margin-top:32px; margin-bottom:8px; font-size:22px}
+  h4{color:var(--navy-soft); margin-top:22px; margin-bottom:6px; font-size:17px}
+  p{margin:8px 0 14px}
+
+  .callout{
+    border-left:4px solid var(--teal); background:#fff;
+    padding:14px 18px; margin:14px 0; border-radius:0 8px 8px 0;
+  }
+  .callout.warn{border-color:var(--coral); background:#FEF2F2}
+  .callout.simple{border-color:var(--nontech); background:#FAF5FF}
+  .callout .label{
+    font-size:11px; font-weight:700; letter-spacing:1px;
+    color:var(--teal-dark); text-transform:uppercase; margin-bottom:4px;
+  }
+  .callout.warn .label{color:var(--coral-dark)}
+  .callout.simple .label{color:#7C3AED}
+
+  .grid{display:grid; gap:14px}
+  .grid.cols-2{grid-template-columns:1fr 1fr}
+  .grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+  @media (max-width:760px){ .grid.cols-2,.grid.cols-3{grid-template-columns:1fr} }
+
+  .card{
+    background:#fff; border:1px solid var(--border); border-radius:10px;
+    padding:18px 20px;
+  }
+  .card .tag{
+    display:inline-block; font-size:11px; font-weight:700; letter-spacing:1px;
+    text-transform:uppercase; padding:2px 8px; border-radius:4px;
+    background:var(--slate-bg); color:var(--slate); margin-bottom:8px;
+  }
+  .card .tag.tech{background:#DBEAFE; color:#1D4ED8}
+  .card .tag.simple{background:#FAE8FF; color:#A21CAF}
+  .card .tag.both{background:#CCFBF1; color:var(--teal-dark)}
+  .card h4{margin-top:0}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px}
+  th,td{padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); vertical-align:top}
+  th{background:var(--slate-bg); color:var(--navy); font-weight:700; font-size:12px;
+     letter-spacing:0.5px; text-transform:uppercase}
+  tr:last-child td{border-bottom:none}
+  td code{background:var(--slate-bg); padding:1px 5px; border-radius:3px; font-size:12px}
+
+  .qa{
+    background:#fff; border:1px solid var(--border); border-radius:10px;
+    margin:14px 0; overflow:hidden;
+  }
+  .qa summary{
+    cursor:pointer; padding:16px 20px; font-weight:600; font-size:15px;
+    color:var(--navy); list-style:none; position:relative;
+    display:flex; justify-content:space-between; align-items:flex-start; gap:14px;
+  }
+  .qa summary::-webkit-details-marker{display:none}
+  .qa summary::after{
+    content:"+"; color:var(--teal); font-weight:bold; font-size:22px; line-height:1;
+    flex-shrink:0;
+  }
+  .qa[open] summary::after{content:"−"}
+  .qa summary .qpill{
+    flex-shrink:0; font-size:10px; font-weight:700; letter-spacing:1px;
+    padding:3px 8px; border-radius:4px; text-transform:uppercase;
+    background:var(--slate-bg); color:var(--slate); align-self:flex-start;
+  }
+  .qa.tech summary .qpill{background:#DBEAFE; color:#1D4ED8}
+  .qa.ethic summary .qpill{background:#FECACA; color:var(--coral-dark)}
+  .qa.scope summary .qpill{background:#FED7AA; color:#C2410C}
+  .qa.compare summary .qpill{background:#E9D5FF; color:#6B21A8}
+  .qa.simple summary .qpill{background:#FAE8FF; color:#A21CAF}
+  .qa .answer{padding:0 20px 18px; border-top:1px solid var(--border)}
+  .qa .answer .for{
+    font-size:11px; font-weight:700; letter-spacing:1px;
+    text-transform:uppercase; color:var(--slate); margin:12px 0 4px;
+  }
+  .qa .answer .for.tech{color:#1D4ED8}
+  .qa .answer .for.simple{color:#A21CAF}
+  .qa .answer p{margin:4px 0 10px}
+
+  code, .mono{font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px}
+  pre{
+    background:var(--navy); color:#E2E8F0; padding:14px 18px; border-radius:8px;
+    overflow-x:auto; font-size:13px; line-height:1.5;
+  }
+  pre .tk{color:var(--teal)}
+  pre .cm{color:var(--slate-light); font-style:italic}
+
+  .pillar-strip{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 16px}
+  .pillar{
+    font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+    padding:4px 10px; border-radius:4px; background:#CCFBF1; color:var(--teal-dark);
+  }
+
+  .stat{
+    display:inline-block; min-width:120px; text-align:center; margin:6px 10px 6px 0;
+    padding:12px 16px; background:var(--navy); color:#fff; border-radius:8px;
+  }
+  .stat .v{display:block; font-size:28px; font-weight:700; color:var(--teal)}
+  .stat .l{font-size:12px; color:var(--slate-light); margin-top:2px}
+
+  .timeline{
+    display:flex; flex-direction:column; gap:12px; margin:14px 0;
+    border-left:3px solid var(--teal); padding-left:18px;
+  }
+  .timeline .era{position:relative}
+  .timeline .era::before{
+    content:""; position:absolute; left:-25px; top:6px; width:12px; height:12px;
+    background:var(--teal); border-radius:50%;
+  }
+  .timeline .era h4{margin:0 0 2px}
+  .timeline .era .when{font-size:12px; color:var(--slate); font-weight:600}
+  .timeline .era p{margin:4px 0}
+
+  footer{
+    text-align:center; padding:32px; color:var(--slate); font-size:13px;
+    border-top:1px solid var(--border); background:#fff;
+  }
+  footer .go{
+    display:inline-block; padding:10px 18px; background:var(--navy); color:#fff;
+    border-radius:6px; margin-top:12px; font-family:ui-monospace, monospace; font-size:13px;
+  }
+
+  .key-claim{
+    background:var(--navy); color:#fff; padding:24px 28px; border-radius:10px;
+    margin:14px 0; border-left:5px solid var(--teal);
+  }
+  .key-claim em{color:var(--teal); font-style:normal; font-weight:600}
+
+  @media print{
+    nav.toc{display:none}
+    .qa{break-inside:avoid}
+    .qa summary::after{display:none}
+    .qa{border:1px solid #ccc}
+    .qa .answer{display:block !important}
+    details{display:block}
+    details > *{display:block !important}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>SignLearn — Defense Preparation Guide</h1>
+  <p>Literature, technology, contribution, and the tough questions — answered for technical and non-technical panel members alike.</p>
+  <div class="meta">
+    <b>ABAYIZERA Samuel</b> · <b>BIZIMANA Bertin</b> · University of Rwanda · 2026
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#field">1. The field at a glance</a>
+  <a href="#latest">2. Latest technologies</a>
+  <a href="#add">3. What we add</a>
+  <a href="#why">4. Why these choices</a>
+  <a href="#how">5. How it works end-to-end</a>
+  <a href="#tough">6. Tough questions, direct answers</a>
+  <a href="#close">7. Closing message</a>
+</nav>
+
+<main>
+
+<!-- ============================================================= -->
+<!-- 1. LITERATURE REVIEW                                          -->
+<!-- ============================================================= -->
+<section id="field">
+  <h2>1. The field at a glance</h2>
+  <p class="lead">Sign-language recognition has moved through three clear eras. SignLearn sits at the leading edge of the third, with one foot stepping into the fourth.</p>
+
+  <div class="callout simple">
+    <div class="label">In one sentence (for non-technical panellists)</div>
+    Scientists have been trying to teach computers to read sign language for thirty years. The methods have improved enormously, but no system has yet combined high accuracy, low cost, and a two-way conversation in one product. SignLearn does.
+  </div>
+
+  <h3>The three eras of sign-language recognition</h3>
+  <div class="timeline">
+    <div class="era">
+      <div class="when">1990s – early 2000s</div>
+      <h4>Era 1 — Sensor gloves</h4>
+      <p>Researchers wired up gloves with bend-sensors and gyroscopes (Starner, Pentland, others). Accuracy was high, but users had to wear ugly hardware. <em>Unusable in real life.</em></p>
+    </div>
+    <div class="era">
+      <div class="when">2000s – mid-2010s</div>
+      <h4>Era 2 — Classical computer vision</h4>
+      <p>Cameras replaced gloves. Hand-crafted features (HOG, SIFT) and traditional classifiers (SVM, HMM) read the hand from raw video. Worked in the lab; failed when lighting, background, or signer changed.</p>
+    </div>
+    <div class="era">
+      <div class="when">2015 – today</div>
+      <h4>Era 3 — Deep learning</h4>
+      <p>CNNs and recurrent networks (LSTM, GRU) learned features directly from video. WLASL (2020) and ASL-Citizen (2024) made benchmark data available. Accuracy crossed the 90&nbsp;% threshold for isolated signs — but GPU requirements kept these systems out of everyday hands. <em>This is where SignLearn lives.</em></p>
+    </div>
+    <div class="era">
+      <div class="when">2022 – emerging</div>
+      <h4>Era 4 — Continuous signing &amp; transformers</h4>
+      <p>SignBERT, MS-G3D, and CTC-trained transformers attack the harder problem of reading full sentences with no manual segmentation. The frontier — and where we point the project next.</p>
+    </div>
+  </div>
+
+  <h3>The three problems no one has solved together</h3>
+  <div class="grid cols-3">
+    <div class="card">
+      <span class="tag">Gap 1</span>
+      <h4>One-way only</h4>
+      <p>Almost every published system converts sign → text <em>or</em> speech → text — not both in one session, with one shared transcript.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Gap 2</span>
+      <h4>Hardware-bound</h4>
+      <p>State-of-the-art systems demand GPUs, depth cameras (Kinect, LeapMotion), or sensor gloves. They never deploy outside research labs.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Gap 3</span>
+      <h4>Lab-only accuracy</h4>
+      <p>Published benchmarks collapse under real lighting, real signers, and real backgrounds. The 95&nbsp;% number in a paper rarely survives a webcam.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- 2. LATEST TECHNOLOGIES                                        -->
+<!-- ============================================================= -->
+<section id="latest">
+  <h2>2. Latest technologies in 2024–2026</h2>
+  <p class="lead">A short tour of what the world is using right now, and where SignLearn touches each.</p>
+
+  <table>
+    <thead>
+      <tr><th>Technology</th><th>What it does</th><th>Used by SignLearn?</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>MediaPipe Hands</b><br><span class="mono">Google, 2020</span></td>
+        <td>Extracts 21 3D landmarks per hand from a webcam frame, in the browser, at 30+ fps. Replaces the entire CNN front-end of older systems.</td>
+        <td>Yes — runs locally in the browser via the MediaPipe Tasks API. This is the single most important upstream choice.</td>
+      </tr>
+      <tr>
+        <td><b>WLASL-2000</b><br><span class="mono">Li et&nbsp;al., 2020</span></td>
+        <td>2000-word isolated-sign benchmark sourced from YouTube. The standard academic test set for word-level ASL.</td>
+        <td>Initially yes — produced our baseline (26&nbsp;% top-1) — then dropped in favour of ASL-Citizen for quality reasons.</td>
+      </tr>
+      <tr>
+        <td><b>ASL-Citizen</b><br><span class="mono">Microsoft, 2024</span></td>
+        <td>Citizen-science-collected ASL dataset with controlled capture and ~3× higher signer diversity than WLASL.</td>
+        <td>Yes — current source for the word-level research extension (47–97 classes). Drove the 26&nbsp;% → 87.4&nbsp;% top-1 lift.</td>
+      </tr>
+      <tr>
+        <td><b>Transformer encoders</b></td>
+        <td>Self-attention sequence models. SignBERT (2021) and successor work treat sign sequences like sentences.</td>
+        <td>Trained as one of six architectures in our sweep. Crossed 96&nbsp;%, but lost to TCN on the parsimony×latency frontier.</td>
+      </tr>
+      <tr>
+        <td><b>TCN (Temporal Convolutional Network)</b><br><span class="mono">Bai et&nbsp;al., 2018</span></td>
+        <td>Dilated 1D convolutions over time. Fully parallel during training, exponentially growing receptive field, no vanishing-gradient pain.</td>
+        <td>Yes — our production model.</td>
+      </tr>
+      <tr>
+        <td><b>ONNX Runtime</b><br><span class="mono">Microsoft</span></td>
+        <td>Cross-framework model serving with aggressive CPU operator fusion. Eliminates the Python tensor-framework runtime.</td>
+        <td>Yes — production inference path. 14× faster than Keras on CPU (0.23 ms p95 vs 2.88 ms).</td>
+      </tr>
+      <tr>
+        <td><b>Web Speech API</b></td>
+        <td>Native browser speech-to-text in Chrome and Edge.</td>
+        <td>Yes — the hearing user's input channel. Runs locally; no audio leaves the browser.</td>
+      </tr>
+      <tr>
+        <td><b>Next.js 15 + React 18</b></td>
+        <td>Modern web framework with server components, edge deploy, and TypeScript-first ergonomics.</td>
+        <td>Yes — the client. The MediaPipe overlay and the shared transcript live in one Next.js app.</td>
+      </tr>
+      <tr>
+        <td><b>Continuous-sign CTC training</b></td>
+        <td>Connectionist Temporal Classification — trains sequence-to-sequence models without manual frame-level alignment.</td>
+        <td>Not yet — named in Future Work §6.4 as the path beyond isolated signs.</td>
+      </tr>
+      <tr>
+        <td><b>WebGPU on-device inference</b></td>
+        <td>Browser-native GPU acceleration. Enables fully in-browser ONNX without a backend server.</td>
+        <td>Not yet — also Future Work. Removes the backend entirely; restores privacy by default.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================= -->
+<!-- 3. WHAT WE ADD                                                -->
+<!-- ============================================================= -->
+<section id="add">
+  <h2>3. What SignLearn adds to the existing research</h2>
+  <p class="lead">The building blocks are all known. The contribution is the combination that no published system offers <em>together</em>.</p>
+
+  <div class="key-claim">
+    <em>"MediaPipe + sequence model"</em> is not new. <em>This specific combination — empirically chosen, CPU-deployable, bidirectional, fully open — is.</em>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <span class="tag both">Contribution 1</span>
+      <h4>Empirical model selection</h4>
+      <p>Instead of picking one architecture and reporting only its accuracy, we trained <b>six architectures</b> (LSTM, BiLSTM, Transformer, CNN-BiLSTM, Conformer-Lite, TCN) under <b>identical conditions</b> — same splits, seed, epochs, batch — and published the per-run reports for all twelve sweep configurations.</p>
+      <p><em>Why it matters:</em> The 97.84&nbsp;% headline is supported by a transparent comparison, not a private hyperparameter search. Five of the six architectures crossed 96&nbsp;%, which is itself a finding: <b>landmark normalisation matters more than the choice of temporal backbone</b>.</p>
+    </div>
+    <div class="card">
+      <span class="tag both">Contribution 2</span>
+      <h4>Sub-millisecond CPU inference</h4>
+      <p>By exporting the TCN to ONNX Runtime, the production model runs at <b>p95 0.23 ms per sample</b> (~4,890 fps) on a single CPU core — about <b>14× faster</b> than the same model in Keras and well below the 30 ms real-time budget.</p>
+      <p><em>Why it matters:</em> Removes the GPU requirement that gates almost all prior real-time SLR work. Every laptop in this room can run it. Every classroom and clinic computer can run it.</p>
+    </div>
+    <div class="card">
+      <span class="tag both">Contribution 3</span>
+      <h4>Genuine bidirectional communication</h4>
+      <p>One WebSocket session carries the signer's sign-to-text channel and the hearing user's speech-to-text channel into <b>one shared transcript</b>. Turn-taking is natural; neither user has to translate.</p>
+      <p><em>Why it matters:</em> Removes the asymmetric translation burden that today forces Deaf users to carry the conversation. Most prior systems are sign-to-text only.</p>
+    </div>
+    <div class="card">
+      <span class="tag both">Contribution 4</span>
+      <h4>Full open-artefact release</h4>
+      <p>Every per-run report, the dataset audit, the ONNX checkpoint, the training scripts, the latency profile, and the thesis itself are public. The headline result reproduces from a clean clone in six <span class="mono">make</span> commands.</p>
+      <p><em>Why it matters:</em> A reviewer can verify every number in the thesis without trusting us. The work earns the Verifiability pillar by construction, not by claim.</p>
+    </div>
+  </div>
+
+  <h3>Two findings that contribute to the literature</h3>
+  <div class="grid cols-2">
+    <div class="card">
+      <span class="tag">Finding A</span>
+      <h4>Data &gt; architecture, for landmark SLR</h4>
+      <p>Five of six architectures crossed 96&nbsp;% under identical conditions. This is not consistently reported in the landmark-based SLR literature, and it implies the next wave of progress will come from better data — not better model designs.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Finding B</span>
+      <h4>The WLASL → ASL-Citizen lift</h4>
+      <p>The same model family on a comparably sized vocabulary went from 26.0&nbsp;% top-1 (WLASL) to 87.4&nbsp;% top-1 (ASL-Citizen) — a <b>3.4× improvement</b> driven by signer diversity and capture quality, not architecture. This is the single largest intervention in the project.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- 4. WHY THESE CHOICES                                          -->
+<!-- ============================================================= -->
+<section id="why">
+  <h2>4. Why we chose each piece</h2>
+  <p class="lead">Every important decision in the system has a defensible reason, anchored in measured numbers from our own runs.</p>
+
+  <h3>Why MediaPipe Hands (and not a CNN that reads pixels)</h3>
+  <div class="callout simple">
+    <div class="label">For non-technical readers</div>
+    A normal sign-language system tries to read the whole video frame — every pixel — to figure out what the hand is doing. We do something smarter: we let MediaPipe find just the 42 important points on the hands first (21 per hand), and then we only look at those points. It's like reading a connect-the-dots picture instead of staring at a photograph.
+  </div>
+  <p><b>Technical reasons:</b></p>
+  <ul>
+    <li><b>30 fps in the browser, on any laptop.</b> No GPU required.</li>
+    <li><b>Privacy by default.</b> Raw video never leaves the browser — only the 126-dimensional landmark vector crosses the network.</li>
+    <li><b>Signer-invariant by construction.</b> Wrist-centring + unit-scaling means absolute position and camera distance drop out.</li>
+    <li><b>1000× smaller input.</b> A 480×640 RGB frame is ~921,600 numbers; the landmark vector is 126.</li>
+  </ul>
+
+  <h3>Why TCN (and not LSTM, Transformer, or anything else)</h3>
+  <div class="callout simple">
+    <div class="label">For non-technical readers</div>
+    Think of TCN as a "sliding window" approach that looks at the past second of motion in parallel. LSTMs read the same data one frame at a time, which is slower. Transformers are more flexible but cost more memory and run slower on CPUs. We tested all six and picked the one that won on the trade-off between accuracy, model size, and speed.
+  </div>
+  <table>
+    <thead><tr><th>Architecture</th><th>Test acc</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>LSTM</td><td>96.4&nbsp;%</td><td>Strong, but slower training and a larger ONNX export.</td></tr>
+      <tr><td>BiLSTM</td><td>96.7&nbsp;%</td><td>Same family, marginal gain.</td></tr>
+      <tr><td>Transformer</td><td>96.9&nbsp;%</td><td>Competitive, but multi-head attention is slower under ONNX-on-CPU.</td></tr>
+      <tr><td>CNN-BiLSTM</td><td>97.2&nbsp;%</td><td>Best non-winner. Larger parameter count.</td></tr>
+      <tr><td>Conformer-Lite</td><td>96.5&nbsp;%</td><td>Most complex, no accuracy reward.</td></tr>
+      <tr style="background:#CCFBF1"><td><b>TCN</b></td><td><b>97.84&nbsp;%</b></td><td><b>Won.</b> Highest accuracy, only 126,372 parameters, fastest ONNX path.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Why ONNX (and not Keras for serving)</h3>
+  <p>Same model, two runtimes:</p>
+  <div>
+    <span class="stat"><span class="v">2.88 ms</span><span class="l">Keras p50</span></span>
+    <span class="stat"><span class="v">0.23 ms</span><span class="l">ONNX p95</span></span>
+    <span class="stat"><span class="v">14×</span><span class="l">speedup</span></span>
+    <span class="stat"><span class="v">538 KB</span><span class="l">ONNX file</span></span>
+  </div>
+  <p>ONNX removes the Python tensor-framework runtime, fuses graph operations at load time, and runs hand-tuned CPU kernels. Lower latency means a slower laptop can still run the system, which means more potential users.</p>
+
+  <h3>Why WebSocket (and not REST)</h3>
+  <p>REST would force the client to poll for every prediction — wasteful at 30 fps. WebSocket holds one TCP connection per signer and streams frames in, predictions out. End-to-end round-trip: <b>40.66 ms mean, 127 ms p95</b>.</p>
+
+  <h3>Why Next.js (and not vanilla React or Vite)</h3>
+  <p>Three reasons: (a) App Router + server components match the future deployment story (Vercel edge + Render backend); (b) TypeScript-first ergonomics; (c) the MediaPipe Tasks API integrates cleanly with the Next.js client component lifecycle.</p>
+
+  <h3>Why wrist-centred unit-scaling normalisation</h3>
+  <p>This is the single piece of code that does the most recognition work. Centring on the wrist makes the absolute position of the signer in the frame irrelevant. Unit-scaling by maximum inter-landmark distance makes the camera distance irrelevant. The result: the same sign at 30 cm and at 1 m produces nearly identical input tensors. Validated empirically — five of six architectures cross 96&nbsp;% on the normalised features.</p>
+
+  <h3>Why a 30-frame buffer (and not a different window)</h3>
+  <p>At 30 fps, 30 frames is one second — the natural duration of a static fingerspelling pose. Shorter windows miss motion context; longer windows add latency and overfit static signs. The thesis Future Work names a learned-window CTC architecture as the next step.</p>
+
+  <h3>Why the EMA smoother with 0.75 threshold and 15-frame cooldown</h3>
+  <p>Raw softmax outputs at 30 fps are too noisy to surface directly. EMA dampens single-frame jitter; the 0.75 confidence gate rejects low-confidence emissions before they reach the UI; the 15-frame (500&nbsp;ms) cooldown prevents the same letter from being re-emitted on every prediction tick. <b>These three constants were tuned on a held-out webcam recording session and never adjusted against the test set</b> — so they do not contaminate the 97.84&nbsp;% number.</p>
+</section>
+
+<!-- ============================================================= -->
+<!-- 5. HOW IT WORKS                                               -->
+<!-- ============================================================= -->
+<section id="how">
+  <h2>5. How it works end-to-end</h2>
+  <p class="lead">Eight steps from a hand in front of a webcam to a word in a transcript.</p>
+
+  <table>
+    <thead><tr><th>#</th><th>Where</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Browser</td><td>The webcam captures a frame at ~30&nbsp;fps.</td></tr>
+      <tr><td>2</td><td>Browser</td><td>MediaPipe Hands locally extracts 21 landmarks per hand → 126 floats.</td></tr>
+      <tr><td>3</td><td>Browser → Server</td><td>The 126-float vector is emitted over WebSocket. <b>Raw video never leaves the device.</b></td></tr>
+      <tr><td>4</td><td>Server</td><td><span class="mono">FrameBuffer</span> normalises each frame (wrist-centred, unit-scaled) and pushes it onto a 30-frame circular buffer.</td></tr>
+      <tr><td>5</td><td>Server</td><td>When the buffer fills, the (30, 126) tensor is passed to the ONNX-Runtime TCN, which produces a 36-way softmax in 0.23&nbsp;ms.</td></tr>
+      <tr><td>6</td><td>Server</td><td>The <span class="mono">PredictionSmoother</span> applies EMA, the 0.75 confidence gate, and the 15-frame cooldown. About 14&nbsp;% of frames are suppressed.</td></tr>
+      <tr><td>7</td><td>Server → Browser</td><td>If the smoother approves, a <span class="mono">{label, confidence}</span> message is emitted back over WebSocket.</td></tr>
+      <tr><td>8</td><td>Browser</td><td>The predicted letter is appended to the shared transcript visible to both the signer and the hearing user.</td></tr>
+    </tbody>
+  </table>
+
+  <p>The hearing user's path is symmetric: microphone → Web Speech API (in-browser) → transcribed text → same shared transcript. The two conversation streams write to one log; turn-taking is natural.</p>
+</section>
+
+<!-- ============================================================= -->
+<!-- 6. TOUGH QUESTIONS                                            -->
+<!-- ============================================================= -->
+<section id="tough">
+  <h2>6. Tough questions, direct answers</h2>
+  <p class="lead">Every question below was asked or anticipated during preparation. Click any question to expand. Each answer is structured for both technical and non-technical panellists.</p>
+
+  <h3>Technical methodology</h3>
+
+  <details class="qa tech">
+    <summary>Why TCN over Transformer when Transformer also crossed 96&nbsp;%? <span class="qpill">Technical</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>Three numerical reasons. (1) TCN reached 97.84&nbsp;% vs Transformer's 96.9&nbsp;%; on 11,417 test samples that's ~100 fewer errors. (2) TCN has 126,372 parameters; the Transformer is larger, which matters for our ONNX-on-CPU constraint. (3) Dilated convolutions are ONNX-Runtime friendly; multi-head attention is slower on CPU. We chose on the accuracy × parameters × latency frontier, not on accuracy alone.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>Both architectures are good. TCN is slightly more accurate, smaller, and faster on the kind of computer most people own. We picked the one that wins on all three.</p>
+    </div>
+  </details>
+
+  <details class="qa tech">
+    <summary>Is 97.84&nbsp;% real, or are you overfitting? <span class="qpill">Technical</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>Three checks. (1) Validation-to-test gap is ~0.3 pp. (2) Macro precision 96.25&nbsp;%, macro recall 95.32&nbsp;%, macro F1 95.45&nbsp;% — all within 2.5 pp of the headline, so it isn't propped up by one dominant class. (3) The split is signer-aware: no signer appears in both train and test (<span class="mono">artifacts/reports/audit_signers.md</span>). Overfitting would show as a class with very high recall and near-zero precision; the per-class report doesn't contain one.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>We never let the model see the same person's hand in training and testing. The number isn't memorisation — it's recognition.</p>
+    </div>
+  </details>
+
+  <details class="qa tech">
+    <summary>You used seed=42 for everything. How do you know this isn't lucky? <span class="qpill">Technical</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>It is the principal threat to the headline and we name it directly in §5.7. Two mitigations: five of twelve sweep configurations crossed 96&nbsp;%, which is unlikely under a single lucky initialisation; and the macro precision/recall/F1 sit within 2.5 pp of the headline. A full cross-seed bootstrap is the first item in §6.4.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>Yes — we acknowledge this honestly. We didn't try a hundred random seeds and pick the best one; we set one number and ran everything against it. The number we picked happened to work, but five different model designs all crossed the same high bar with the same setting — so the result isn't an accident.</p>
+    </div>
+  </details>
+
+  <details class="qa tech">
+    <summary>How is macro F1 95.45&nbsp;% compatible with 47.6&nbsp;% recall on the digit "two"? <span class="qpill">Technical</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>Both are real. The ASL handshape for the digit "two" is identical to the letter "V" — extended index and middle finger. Same for "six" and "W", and "zero" and "O". The model isn't failing — it's correctly classifying a hand that is, in ASL, ambiguous between two labels. ~1&nbsp;% of total test error is linguistic, not a model bug, and the thesis quantifies this in §5.3.2.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>The number "two" and the letter "V" are signed with the exact same hand shape. There is no way for any model — or any human, without context — to tell them apart from the hand alone. We report this honestly rather than hiding it.</p>
+    </div>
+  </details>
+
+  <details class="qa tech">
+    <summary>Why no continuous signing? Isn't that the real problem? <span class="qpill">Technical</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>Continuous signing requires CTC-loss training on sentence-level segmented video and a different smoother — substantially more data and a different research problem. The landmark feature pipeline we built is directly reusable; only the loss and inference smoother change. Named in §6.4 as a 12-month item, with the recording infrastructure already in place.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>That's the next chapter. We deliberately scoped this project to the part we could do well, and we built the foundation that the next chapter needs.</p>
+    </div>
+  </details>
+
+  <h3>Comparisons with existing systems</h3>
+
+  <details class="qa compare">
+    <summary>Google has MediaPipe ASL demos. Aren't you reinventing it? <span class="qpill">Comparison</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>We use the MediaPipe team's landmark extraction — that contribution is theirs. Everything downstream is ours: the empirical six-architecture sweep with open per-run reports, the ONNX export pathway, the bidirectional WebSocket transcript, and the open release. None of these are in the MediaPipe demos.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>Google makes the tool we use to see the hand. We built the system that decides what the hand <em>means</em> — and the conversation that wraps around it. Google has not shipped that.</p>
+    </div>
+  </details>
+
+  <details class="qa compare">
+    <summary>The WLASL paper reports 60–75&nbsp;% top-1 on similar data. You report 87.4&nbsp;%. Why is yours so much higher? <span class="qpill">Comparison</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>Because we are not comparing on the same data. The 87.4&nbsp;% is on ASL-Citizen, a higher-quality dataset (~3× more signers per class, controlled capture, no YouTube domain shift). On WLASL itself, our same architecture reaches 26.0&nbsp;% top-1 — squarely in the range the literature reports. The 3.4× lift is a data-quality result, not a model-quality result. We document the pivot transparently in §3.1.2 and §5.4.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>Better data, not a smarter model. We changed where we trained from, not how we train.</p>
+    </div>
+  </details>
+
+  <details class="qa compare">
+    <summary>SignSpeak and other commercial ASL apps already exist — what is new here? <span class="qpill">Comparison</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>SignSpeak is a respected commercial system. Where we differ: (1) we publish per-run reports for every architecture, not just the winner; (2) we run on CPU at p95 0.23 ms — SignSpeak requires a GPU; (3) we ship both directions through one shared transcript; (4) we are fully open-source. The contribution is not "better than SignSpeak" — it's "verifiable and deployable on commodity hardware, in combination."</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>They make a product. We made a system that anyone — including future researchers — can inspect, copy, and improve. Different goal, same underlying field.</p>
+    </div>
+  </details>
+
+  <h3>Ethics &amp; privacy</h3>
+
+  <details class="qa ethic">
+    <summary>You're streaming a Deaf person's body movements to a server. What is the privacy story? <span class="qpill">Ethics</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>Raw video never leaves the browser. MediaPipe runs locally; only the 126-float landmark vector crosses the WebSocket. Audio is identical — Web Speech API runs in-browser, only transcribed text crosses the wire. An intercepted stream reveals hand position, not face, environment, or identity. Source: <span class="mono">backend/api/socket_handlers.py</span>.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>The webcam stays on your computer. We never see your face, your room, or your voice — only the 21 points on each hand, as numbers. Even if someone intercepted those numbers, they would not be able to identify you.</p>
+    </div>
+  </details>
+
+  <details class="qa ethic">
+    <summary>Did Deaf people consent to being in your training data? <span class="qpill">Ethics</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>The Kaggle ASL datasets carry their published licences and signer demographics are not documented; many are inferred to be hearing ASL learners. ASL-Citizen — the source for the word-level extension — was collected by Microsoft Research with documented Deaf-community participation protocols. We did not collect any new training data ourselves, so direct consent collection by our team was not required. The community-recording extension named in §6.4 would require formal consent and IRB approval before recording begins.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>We used public datasets whose authors got the consent they needed. We did not record anyone ourselves. When we start the Rwandan recording phase, we will get formal ethics approval first.</p>
+    </div>
+  </details>
+
+  <details class="qa ethic">
+    <summary>Aren't you appropriating Deaf culture by automating it? <span class="qpill">Ethics</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>Automation is not appropriation when the artefact is open, the beneficiaries are named, and the work is positioned as accessibility infrastructure rather than as a replacement for the Deaf community. Our Future Work explicitly centres a partnership with the Rwanda National Union of the Deaf, not a unilateral product launch. Critically, SignLearn does not claim to translate ASL fluently — it recognises 36 isolated classes, which the thesis names clearly as fingerspelling and digits, not full language.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>This system does not replace interpreters or Deaf people. It removes the burden in moments where no human help is available — like a clinic at 2 a.m. The next step is building it together with the Deaf community, not for them.</p>
+    </div>
+  </details>
+
+  <h3>Scope concerns</h3>
+
+  <details class="qa scope">
+    <summary>Why didn't you do Kinyarwanda Sign Language (RSL)? You're at the University of Rwanda. <span class="qpill">Scope</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>RSL is the highest-value local extension and is named in §6.4 as long-horizon work. It is gated on a community-recording partnership with the Rwanda National Union of the Deaf, not on the model architecture — the pipeline is locale-neutral. Skipping it now is intentional; doing it well requires the partnership we are now positioned to begin.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>We could not build a Rwandan sign-language model without data from Rwandan signers — and that requires partnership and ethics approval that take time. We deliberately built the system in a way that drops in RSL data when it exists, instead of building something we'd have to throw away.</p>
+    </div>
+  </details>
+
+  <details class="qa scope">
+    <summary>Is this even sign-language recognition? You only do fingerspelling and digits. <span class="qpill">Scope</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>The production model recognises a 36-class subset of ASL — the alphabet and digits — which are real ASL lexical items used daily for proper nouns, numbers, and emphasis. The word-level research extension on ASL-Citizen demonstrates the same pipeline scales to 47–97 lexical signs. We do not claim full sentence translation; we frame the scope honestly in §1.4.1 and §6.3.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>You're right that we don't translate full sentences yet — and our thesis says so clearly. What we do today is the part of sign language used for names, numbers, and key words. The word version is in the research extension, and full sentences is what's next.</p>
+    </div>
+  </details>
+
+  <details class="qa scope">
+    <summary>Why no mobile app? <span class="qpill">Scope</span></summary>
+    <div class="answer">
+      <div class="for tech">Technical answer</div>
+      <p>The architecture supports it: MediaPipe Tasks API runs on mobile Chrome and Safari, the ONNX model is 538 KB, and the Next.js client is responsive. The reason we present on a laptop is to keep the defense demo on a single-host setup with no network variability. Mobile packaging is named in §6.4 alongside fully in-browser ONNX.</p>
+      <div class="for simple">For a non-technical panellist</div>
+      <p>The phone version is easy and is on our roadmap — we are demoing on a laptop today only because the network is more predictable that way.</p>
+    </div>
+  </details>
+
+  <h3>Non-technical / impact</h3>
+
+  <details class="qa simple">
+    <summary>Who actually uses this? <span class="qpill">Impact</span></summary>
+    <div class="answer">
+      <div class="for simple">For everyone</div>
+      <p>Four named groups. (1) Deaf and Hard-of-Hearing individuals in moments without an interpreter. (2) Frontline staff in hospitals, schools, and government offices — they can serve Deaf users without escalation. (3) ASL learners — including hearing parents of Deaf children — who get instant feedback on handshape. (4) Researchers, who get an open audited baseline instead of yet another closed system.</p>
+    </div>
+  </details>
+
+  <details class="qa simple">
+    <summary>Why does this matter for Rwanda specifically? <span class="qpill">Impact</span></summary>
+    <div class="answer">
+      <div class="for simple">For everyone</div>
+      <p>Roughly 50,000 Deaf or Hard-of-Hearing Rwandans share a national interpreter pool of fewer than a hundred certified professionals. The asymmetry excludes Deaf Rwandans from classrooms, hospitals, courts, and government services in moments where an interpreter cannot be scheduled. The architecture is locale-neutral, so once a Kinyarwanda Sign Language dataset is collected — the work named in §6.4 — the system extends without code changes.</p>
+    </div>
+  </details>
+
+  <details class="qa simple">
+    <summary>Is this a research project, a startup, or a public service? <span class="qpill">Impact</span></summary>
+    <div class="answer">
+      <div class="for simple">For everyone</div>
+      <p>A public-good research artefact. The licence is permissive. We have no startup intention; the intended adopters are the Rwanda National Union of the Deaf, the Ministry of ICT, and the research community. If a commercial entity wants to take the work forward, the open release does not prevent that.</p>
+    </div>
+  </details>
+
+  <details class="qa simple">
+    <summary>If a Deaf person can just type on a phone, why is this useful? <span class="qpill">Impact</span></summary>
+    <div class="answer">
+      <div class="for simple">For everyone</div>
+      <p>Typing presupposes that both parties share a written language, that the Deaf user has a free hand, and that the asymmetric burden of translation falls on them. In an emergency triage or a classroom question, those preconditions fail. The contribution of SignLearn is not replacing typing — it's removing the translation burden from the Deaf user, and letting hearing people without ASL training participate in real time.</p>
+    </div>
+  </details>
+
+  <details class="qa simple">
+    <summary>What is the next concrete step if you got funding tomorrow? <span class="qpill">Impact</span></summary>
+    <div class="answer">
+      <div class="for simple">For everyone</div>
+      <p>A community-partnered recording project with the Rwanda National Union of the Deaf for approximately 25 conversational words — three to five native Rwandan signers per class, twenty-five takes per signer-class pair, over a three-month window. Based on the lift we observed from the WLASL-to-ASL-Citizen pivot, we project this lifts the word model into the 90&nbsp;%+ range on a meeting-vocabulary scope — sufficient for a real pilot deployment in a Rwandan public-service setting.</p>
+    </div>
+  </details>
+
+</section>
+
+<!-- ============================================================= -->
+<!-- 7. CLOSING                                                    -->
+<!-- ============================================================= -->
+<section id="close">
+  <h2>7. Closing message</h2>
+  <p class="lead">The one sentence to leave the panel with — for both technical and non-technical members.</p>
+
+  <div class="key-claim">
+    SignLearn demonstrates that <em>high-quality, real-time sign recognition is achievable on commodity hardware</em> with a careful landmark-plus-sequence-model architecture, and the only remaining barrier to conversational deployment is <em>community-partnered data — not model capability.</em>
+  </div>
+
+  <p>Every number in this document traces to a file in our public repository. Every choice has a defensible reason. Every limitation is named honestly. We are ready for your questions.</p>
+</section>
+
+</main>
+
+<footer>
+  Prepared for the SignLearn final-year project defense · University of Rwanda · 2026<br>
+  <span class="go">Every number, a file. Every claim, a path. Together.</span>
+</footer>
+
+</body>
+</html>
