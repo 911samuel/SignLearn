@@ -20,6 +20,7 @@ COPY artifacts/checkpoints/tcn_word_best.onnx ./artifacts/checkpoints/tcn_word_b
 COPY artifacts/label_map.json ./artifacts/label_map.json
 COPY docs/vocabulary.md ./docs/vocabulary.md
 COPY configs/asl_citizen_demo_words_curated.txt ./configs/asl_citizen_demo_words_curated.txt
+COPY configs/word_curated_v6_27cls.txt ./configs/word_curated_v6_27cls.txt
 
 ENV PYTHONUNBUFFERED=1 \
     SIGNLEARN_ASYNC_MODE=gevent \

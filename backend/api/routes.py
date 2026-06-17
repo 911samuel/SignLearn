@@ -17,6 +17,7 @@ _SERVER_START = time.time()
 
 def _model_status() -> dict:
     info = model_loader.get_model_info()
+    word_info = model_loader.get_word_model_info()
     return {
         "model_loaded": info["loaded"],
         "backend": info["backend"],
@@ -24,6 +25,9 @@ def _model_status() -> dict:
         "model_path": str(CONFIG.model_path),
         "model_sha256": info["sha256"],
         "load_error": info["load_error"],
+        "word_model_loaded": word_info["loaded"],
+        "word_model_num_classes": word_info["n_classes"] if word_info["loaded"] else None,
+        "word_model_load_error": word_info["load_error"],
     }
 
 

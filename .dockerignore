@@ -21,6 +21,7 @@ docs/
 !docs/vocabulary.md
 configs/*
 !configs/asl_citizen_demo_words_curated.txt
+!configs/word_curated_v6_27cls.txt
 *.md
 !docs/vocabulary.md
 .DS_Store
